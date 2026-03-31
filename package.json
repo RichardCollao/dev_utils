@@ -1,0 +1,33 @@
+{
+  "name": "sonarproject",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "PORT=${PORT:-3000}; fuser -k ${PORT}/tcp >/dev/null 2>&1 || true; nodemon app.js",
+    "copy:vendor": "node scripts/copy-vendor.js",
+    "postinstall": "npm run copy:vendor"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
+    "datatables.net": "^2.3.7",
+    "datatables.net-bs5": "^2.3.7",
+    "ejs": "^5.0.1",
+    "express": "^5.2.1",
+    "izitoast": "^1.4.0",
+    "jquery": "^4.0.0",
+    "node-pty": "^1.1.0",
+    "sweetalert2": "^11.26.23",
+    "ws": "^8.20.0",
+    "xterm": "^5.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

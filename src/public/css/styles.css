@@ -1,0 +1,29 @@
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.tab-content {
+  background-color: #fff;
+  border: 1px solid #dee2e6;
+  border-top: 0;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+.dataTables_wrapper .dataTables_filter input,
+.dataTables_wrapper .dataTables_length select {
+  margin-left: 0.5rem;
+}
+
+#recordsTable th {
+  white-space: nowrap;
+}
+
+.scanner-terminal {
+  width: 100%;
+  min-height: 360px;
+  height: 45vh;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #0f172a;
+}

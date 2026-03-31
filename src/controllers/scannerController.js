@@ -1,0 +1,521 @@
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { randomUUID } = require('node:crypto');
+const pty = require('node-pty');
+const { WebSocketServer } = require('ws');
+const { logApp } = require('../utils/logger');
+const {
+  GLOBAL_FILE_NAME,
+  ensureRootUploadsDir,
+  migrateLegacyUploads,
+  getUploadFilePath
+} = require('../utils/uploadsStorage');
+
+const GLOBAL_FILE_PATH = getUploadFilePath(GLOBAL_FILE_NAME);
+const WORKSPACE_BASE_DIR = '/workspace';
+const SESSION_TTL_MS = 60 * 1000;
+const scannerSessions = new Map();
+
+let scannerWss = null;
+
+function isValidProjectKey(value = '') {
+  const projectKey = String(value || '').trim();
+  if (!projectKey) return false;
+  if (projectKey.length > 400) return false;
+  if (!/^[A-Za-z0-9._:-]+$/.test(projectKey)) return false;
+  return /[^0-9]/.test(projectKey);
+}
+
+function normalizeList(rawValue = '') {
+  return String(rawValue || '')
+    .split(/[\n,]/)
+    .map(function(item) { return item.trim(); })
+    .filter(Boolean)
+    .join(',');
+}
+
+async function readJsonFile(filePath) {
+  const raw = await fs.readFile(filePath, 'utf8');
+  return JSON.parse(raw);
+}
+
+async function ensureUploadsDir() {
+  await ensureRootUploadsDir();
+  await migrateLegacyUploads();
+}
+
+async function readGlobalConfig() {
+  return readJsonFile(GLOBAL_FILE_PATH);
+}
+
+async function readProjectConfig(projectKey) {
+  const filePath = getUploadFilePath(`${projectKey}.json`);
+  return readJsonFile(filePath);
+}
+
+async function ensureDirectoryExists(targetPath, label) {
+  const resolved = path.resolve(targetPath);
+  try {
+    const stats = await fs.stat(resolved);
+    if (!stats.isDirectory()) {
+      const error = new Error(`${label} no es un directorio válido.`);
+      error.status = 400;
+      throw error;
+    }
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      try {
+        await fs.mkdir(resolved, { recursive: true });
+        logApp('info', `[scanner] directorio creado: ${resolved}`);
+      } catch (mkdirError) {
+        const createFailed = new Error(`${label} no existe y no se pudo crear: ${resolved} — ${mkdirError.message}`);
+        createFailed.status = 500;
+        throw createFailed;
+      }
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function buildScannerArgs(input) {
+  const args = [
+    `-Dsonar.projectKey=${input.projectKey}`,
+    `-Dsonar.projectBaseDir=${input.projectBaseDir}`,
+    `-Dsonar.host.url=${input.sonarHostUrl}`,
+    `-Dsonar.token=${input.sonarToken}`
+  ];
+
+  if (input.sources) {
+    args.push(`-Dsonar.sources=${input.sources}`);
+  }
+
+  if (input.exclusions) {
+    args.push(`-Dsonar.exclusions=${input.exclusions}`);
+  }
+
+  return args;
+}
+
+function resolveRuntimeSonarHostUrl(rawHostUrl) {
+  const hostUrl = String(rawHostUrl || '').trim();
+  if (!hostUrl) return hostUrl;
+
+  try {
+    const parsed = new URL(hostUrl);
+    const localhostNames = new Set(['localhost', '127.0.0.1', '::1']);
+
+    if (localhostNames.has(String(parsed.hostname || '').toLowerCase())) {
+      parsed.hostname = 'sonarqube';
+      return parsed.toString().replace(/\/+$/, '');
+    }
+
+    return hostUrl;
+  } catch {
+    return hostUrl;
+  }
+}
+
+function quoteForShell(value) {
+  const raw = String(value || '');
+  if (!raw) return "''";
+
+  if (/^[a-zA-Z0-9_./:=,@-]+$/.test(raw)) {
+    return raw;
+  }
+
+  const escaped = raw.split("'").join(String.raw`'\''`);
+  return "'" + escaped + "'";
+}
+
+function sanitizeArgForDisplay(arg) {
+  const raw = String(arg || '');
+  if (raw.startsWith('-Dsonar.token=')) {
+    return '-Dsonar.token=********';
+  }
+
+  return raw;
+}
+
+function buildDisplayCommand(args = []) {
+  const safeArgs = args.map(function(arg) {
+    return quoteForShell(sanitizeArgForDisplay(arg));
+  });
+
+  return `sonar-scanner ${safeArgs.join(' ')}`.trim();
+}
+
+function buildRawCommand(args = []) {
+  const safeArgs = args.map(function(arg) {
+    return quoteForShell(arg);
+  });
+
+  return `sonar-scanner ${safeArgs.join(' ')}`.trim();
+}
+
+function createSessionData(config) {
+  const sessionId = randomUUID();
+  const payload = {
+    ...config,
+    createdAt: Date.now()
+  };
+
+  const timeoutId = setTimeout(function() {
+    scannerSessions.delete(sessionId);
+  }, SESSION_TTL_MS);
+
+  scannerSessions.set(sessionId, {
+    payload,
+    timeoutId
+  });
+
+  return sessionId;
+}
+
+function consumeSession(sessionId) {
+  const entry = scannerSessions.get(sessionId);
+  if (!entry) return null;
+
+  clearTimeout(entry.timeoutId);
+  scannerSessions.delete(sessionId);
+  return entry.payload;
+}
+
+function parseSocketMessage(raw) {
+  try {
+    return JSON.parse(String(raw || ''));
+  } catch {
+    return null;
+  }
+}
+
+function sendSocketMessage(ws, message) {
+  if (ws.readyState !== 1) return;
+  ws.send(JSON.stringify(message));
+}
+
+function resolveWorkspacePath(storedPath = '') {
+  const raw = String(storedPath || '').trim();
+  if (!raw) return '';
+
+  const withoutWorkspacePrefix = raw.startsWith('/workspace/')
+    ? raw.slice('/workspace/'.length)
+    : (raw === '/workspace' ? '' : raw);
+
+  const cleanRelative = withoutWorkspacePrefix.replace(/^\/+/, '');
+  const resolved = path.resolve(WORKSPACE_BASE_DIR, cleanRelative || '.');
+  const isInsideWorkspace = resolved === WORKSPACE_BASE_DIR
+    || resolved.startsWith(`${WORKSPACE_BASE_DIR}${path.sep}`);
+
+  if (!isInsideWorkspace) {
+    const error = new Error('La ruta debe estar dentro de /workspace.');
+    error.status = 400;
+    throw error;
+  }
+
+  return resolved;
+}
+
+function resolveWorkingDir(globalConfig, projectConfig) {
+  const globalWorkingDir = resolveWorkspacePath(globalConfig.sonarWorkingDirectory);
+  if (globalWorkingDir) return globalWorkingDir;
+
+  return resolveWorkspacePath(projectConfig.sonarProjectBaseDir);
+}
+
+async function resolveShellCwd(session) {
+  const sessionWorkingDirectory = String(session?.workingDirectory || '').trim();
+
+  if (sessionWorkingDirectory) {
+    return path.resolve(sessionWorkingDirectory);
+  }
+
+  try {
+    const globalConfig = await readGlobalConfig();
+    const globalWorkingDirectory = resolveWorkspacePath(globalConfig.sonarWorkingDirectory);
+
+    if (globalWorkingDirectory) {
+      await ensureDirectoryExists(globalWorkingDirectory, 'sonarWorkingDirectory');
+      return globalWorkingDirectory;
+    }
+  } catch {
+  }
+
+  return process.cwd();
+}
+
+async function buildScannerConfig(payload) {
+  const projectKey = String(payload.projectKey || payload.sonarProjectKey || '').trim();
+  if (!isValidProjectKey(projectKey)) {
+    const error = new Error('Debe seleccionar un proyecto válido.');
+    error.status = 400;
+    throw error;
+  }
+
+  await ensureUploadsDir();
+
+  let projectConfig;
+  let globalConfig;
+
+  try {
+    projectConfig = await readProjectConfig(projectKey);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      const notFound = new Error('No existe la configuración del proyecto seleccionado.');
+      notFound.status = 404;
+      throw notFound;
+    }
+
+    throw error;
+  }
+
+  try {
+    globalConfig = await readGlobalConfig();
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      const notFound = new Error('No existe la configuración global.');
+      notFound.status = 404;
+      throw notFound;
+    }
+
+    throw error;
+  }
+
+  const sonarToken = String(globalConfig.sonarToken || '').trim();
+  const sonarHostUrl = resolveRuntimeSonarHostUrl(globalConfig.sonarHostUrl);
+  const projectBaseDir = resolveWorkspacePath(projectConfig.sonarProjectBaseDir);
+  const workingDirectory = resolveWorkingDir(globalConfig, projectConfig);
+
+  if (!sonarToken || !sonarHostUrl || !projectBaseDir || !workingDirectory) {
+    const error = new Error('Configuración incompleta. Verifique token, host, projectBaseDir y sonarWorkingDirectory.');
+    error.status = 400;
+    throw error;
+  }
+
+  await ensureDirectoryExists(projectBaseDir, 'sonarProjectBaseDir');
+  await ensureDirectoryExists(workingDirectory, 'sonarWorkingDirectory');
+
+  const sources = normalizeList(payload.txtSources);
+  const exclusions = normalizeList(payload.txtExclusions);
+  const scannerArgs = buildScannerArgs({
+    projectKey,
+    projectBaseDir,
+    sonarHostUrl,
+    sonarToken,
+    sources,
+    exclusions
+  });
+
+  return {
+    projectKey,
+    projectBaseDir,
+    sonarHostUrl,
+    sonarToken,
+    sources,
+    exclusions,
+    workingDirectory,
+    displayCommand: buildDisplayCommand(scannerArgs),
+    rawCommand: buildRawCommand(scannerArgs)
+  };
+}
+
+async function createScannerSession(req, res) {
+  try {
+    const config = await buildScannerConfig(req.body || {});
+    const sessionId = createSessionData(config);
+
+    await logApp('info', '[scanner] session created', {
+      sessionId,
+      projectKey: config.projectKey,
+      workingDirectory: config.workingDirectory,
+      sources: config.sources,
+      exclusions: config.exclusions
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        sessionId,
+        wsPath: '/ws/scanner'
+      }
+    });
+  } catch (error) {
+    await logApp('error', '[scanner] create session error', {
+      message: error?.message,
+      stack: error?.stack,
+      status: error?.status,
+      code: error?.code
+    });
+
+    return res.status(error?.status || 500).json({
+      success: false,
+      message: error?.message || 'No fue posible preparar la sesión de SonarScanner.'
+    });
+  }
+}
+
+function initScannerWebSocket(server) {
+  if (scannerWss) return scannerWss;
+
+  scannerWss = new WebSocketServer({
+    server,
+    path: '/ws/scanner'
+  });
+
+  scannerWss.on('connection', async function(ws, request) {
+    const host = request.headers.host || 'localhost';
+    const requestUrl = new URL(request.url || '', `http://${host}`);
+    const sessionId = String(requestUrl.searchParams.get('sessionId') || '').trim();
+
+    const session = sessionId ? consumeSession(sessionId) : null;
+
+    if (sessionId && !session) {
+      sendSocketMessage(ws, { type: 'error', message: 'Sesión inválida o expirada.' });
+      ws.close(1008, 'invalid-session');
+      return;
+    }
+
+    const shell = os.platform() === 'win32' ? 'cmd.exe' : '/bin/bash';
+
+    let scannerProcess;
+
+    try {
+      scannerProcess = pty.spawn(shell, ['-i'], {
+        name: 'xterm-color',
+        cols: 120,
+        rows: 30,
+        cwd: await resolveShellCwd(session),
+        env: {
+          ...process.env,
+          SHELL: shell
+        }
+      });
+    } catch (error) {
+      await logApp('error', '[scanner] pty spawn error', {
+        message: error?.message,
+        stack: error?.stack,
+        projectKey: session?.projectKey || null,
+        workingDirectory: session?.workingDirectory || null
+      });
+
+      sendSocketMessage(ws, {
+        type: 'error',
+        message: `No fue posible iniciar sonar-scanner: ${error?.message || 'error desconocido'}`
+      });
+      ws.close(1011, 'spawn-error');
+      return;
+    }
+
+    await logApp('info', '[scanner] shell started', {
+      hasSession: !!session,
+      projectKey: session?.projectKey || null
+    });
+
+    if (session) {
+      sendSocketMessage(ws, {
+        type: 'info',
+        message: `Iniciando SonarScanner para ${session.projectKey}...\r\n`
+      });
+
+      sendSocketMessage(ws, {
+        type: 'info',
+        message: `$ ${session.displayCommand}\r\n\r\n`
+      });
+
+      scannerProcess.write(`${session.rawCommand}\r`);
+    }
+
+    scannerProcess.onData(function(chunk) {
+      sendSocketMessage(ws, { type: 'output', data: chunk });
+    });
+
+    scannerProcess.onExit(async function(event) {
+      const exitCode = Number.isFinite(event?.exitCode) ? event.exitCode : 1;
+
+      await logApp('info', '[scanner] finished', {
+        projectKey: session?.projectKey || null,
+        exitCode,
+        signal: event?.signal
+      });
+
+      sendSocketMessage(ws, {
+        type: 'exit',
+        exitCode,
+        signal: event?.signal
+      });
+
+      if (ws.readyState === 1) {
+        ws.close(1000, 'scan-finished');
+      }
+    });
+
+    ws.on('message', function(raw) {
+      const message = parseSocketMessage(raw);
+
+      if (message?.type === 'resize') {
+        const cols = Number(message.cols);
+        const rows = Number(message.rows);
+
+        if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
+        if (cols < 20 || rows < 5) return;
+
+        scannerProcess.resize(Math.floor(cols), Math.floor(rows));
+        return;
+      }
+
+      if (message?.type === 'runScanner') {
+        (async function() {
+          try {
+            const config = await buildScannerConfig(message.payload || {});
+
+            sendSocketMessage(ws, {
+              type: 'info',
+              message: `Iniciando SonarScanner para ${config.projectKey}...\r\n`
+            });
+
+            sendSocketMessage(ws, {
+              type: 'info',
+              message: `$ ${config.displayCommand}\r\n\r\n`
+            });
+
+            scannerProcess.write(`${config.rawCommand}\r`);
+          } catch (error) {
+            await logApp('error', '[scanner] runScanner websocket error', {
+              message: error?.message,
+              stack: error?.stack,
+              status: error?.status
+            });
+
+            sendSocketMessage(ws, {
+              type: 'error',
+              message: error?.message || 'No fue posible ejecutar SonarScanner.'
+            });
+          }
+        })();
+        return;
+      }
+
+      if (message?.type === 'input') {
+        const data = String(message.data || '');
+        if (!data) return;
+        scannerProcess.write(data);
+      }
+    });
+
+    ws.on('close', function() {
+      try {
+        scannerProcess.kill();
+      } catch {
+      }
+    });
+  });
+
+  return scannerWss;
+}
+
+module.exports = {
+  createScannerSession,
+  initScannerWebSocket
+};

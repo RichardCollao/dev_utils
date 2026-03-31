@@ -1,0 +1,90 @@
+<!-- Modal: Diff Branches -->
+<div class="modal fade" id="modalDiff" tabindex="-1" aria-labelledby="modalDiffLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalDiffLabel">Comparar ramas</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="selBase" class="form-label fw-semibold">Base</label>
+          <select id="selBase" class="form-select"></select>
+        </div>
+        <div class="mb-3">
+          <label for="selCompare" class="form-label fw-semibold">Compare</label>
+          <select id="selCompare" class="form-select"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmDiff" onclick="confirmDiff()">Comparar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openDiffModal() {
+    const selProject = document.querySelector('#selProject');
+    const projectKey = selProject ? selProject.value : '';
+    if (!projectKey) {
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un proyecto antes de comparar ramas.' });
+      return;
+    }
+
+    request('/api/projects/' + encodeURIComponent(projectKey) + '/branches', 'GET', null, function (response) {
+      if (!response.success || !Array.isArray(response.data)) {
+        Swal.fire({ icon: 'error', title: 'Error', text: response.message || 'No fue posible obtener las ramas.' });
+        return;
+      }
+      const options = response.data.map(function (b) {
+        return '<option value="' + b + '">' + b + '</option>';
+      }).join('\n');
+      const selBase = document.getElementById('selBase');
+      const selCompare = document.getElementById('selCompare');
+      selBase.innerHTML = options;
+      selCompare.innerHTML = options;
+
+      console.log('response.baseBranch :>> ', response.baseBranch);
+      console.log('response.currentBranch :>> ', response.currentBranch);
+      if (response.baseBranch && response.data.includes(response.baseBranch)) {
+        selBase.value = response.baseBranch;
+      }
+      if (response.currentBranch && response.data.includes(response.currentBranch)) {
+        selCompare.value = response.currentBranch;
+      }
+      const modal = new bootstrap.Modal(document.getElementById('modalDiff'));
+      modal.show();
+    });
+  }
+
+  function confirmDiff() {
+    const selProject = document.querySelector('#selProject');
+    const projectKey = selProject ? selProject.value : '';
+    const base = document.getElementById('selBase').value;
+    const compare = document.getElementById('selCompare').value;
+
+    if (!projectKey || !base || !compare) {
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona proyecto y ramas para comparar.' });
+      return;
+    }
+
+    const query = '?base=' + encodeURIComponent(base) + '&compare=' + encodeURIComponent(compare);
+    request('/api/projects/' + encodeURIComponent(projectKey) + '/diff-files' + query, 'GET', null, function (response) {
+      if (!response.success || !Array.isArray(response.data)) {
+        Swal.fire({ icon: 'error', title: 'Error', text: response.message || 'No fue posible obtener diferencias.' });
+        return;
+      }
+
+      const txtSources = document.getElementById('txtSources');
+      txtSources.value = '';
+      txtSources.value = response.data.join('\n');
+      const modal = bootstrap.Modal.getInstance(document.getElementById('modalDiff'));
+      if (modal) {
+        modal.hide();
+      }      
+      txtSources.focus();
+    });
+  }
+</script>

@@ -1,0 +1,11 @@
+{
+  "watch": [
+    "app.js",
+    "src"
+  ],
+  "ignore": [
+    "logs/**",
+    "uploads/**",
+    "src/uploads/**"
+  ]
+}

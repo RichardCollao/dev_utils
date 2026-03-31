@@ -1,0 +1,46 @@
+# Dependencias
+node_modules/
+src/public/vendor/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Uploads y archivos generados en tiempo de ejecución
+src/uploads/*.json
+!src/uploads/global.json
+
+# Editor / IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Build / dist
+dist/
+build/
+
+# Cobertura y tests
+coverage/
+.nyc_output/
+
+# Caché
+.npm
+.eslintcache
+.parcel-cache
+/uploads
