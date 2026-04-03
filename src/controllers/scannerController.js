@@ -84,6 +84,7 @@ function buildScannerArgs(input) {
   const args = [
     `-Dsonar.projectKey=${input.projectKey}`,
     `-Dsonar.projectBaseDir=${input.projectBaseDir}`,
+    `-Dsonar.working.directory=${input.workingDirectory}`,
     `-Dsonar.host.url=${input.sonarHostUrl}`,
     `-Dsonar.token=${input.sonarToken}`
   ];
@@ -302,6 +303,7 @@ async function buildScannerConfig(payload) {
   const scannerArgs = buildScannerArgs({
     projectKey,
     projectBaseDir,
+    workingDirectory,
     sonarHostUrl,
     sonarToken,
     sources,
