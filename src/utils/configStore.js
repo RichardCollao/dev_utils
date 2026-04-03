@@ -30,12 +30,18 @@ function resolveWorkspacePath(storedPath = '') {
 }
 
 function normalizeDirectory(value = '') {
-  const normalized = String(value || '').trim().replace(/^\/workspace\/?/, '').replace(/^\/+/, '');
-  return normalized || 'sonar/config_directory';
+  return String(value || '').trim().replace(/^\/workspace\/?/, '').replace(/^\/+/, '');
 }
 
-function buildConfigFilePath(directoryRelative = 'sonar/config_directory') {
+function buildConfigFilePath(directoryRelative) {
   const cleanDirectory = normalizeDirectory(directoryRelative);
+
+  if (!cleanDirectory) {
+    const error = new Error('La ruta de configuración es obligatoria.');
+    error.status = 400;
+    throw error;
+  }
+
   const absoluteDirectory = resolveWorkspacePath(cleanDirectory);
   return {
     directoryRelative: cleanDirectory,
@@ -56,16 +62,16 @@ function normalizeBundle(raw) {
       globalConfigDirectory: normalizeDirectory(global.globalConfigDirectory)
     },
     projects: projects
-      .filter(function(item) {
+      .filter(function (item) {
         return item && typeof item === 'object';
       })
-      .map(function(item) {
+      .map(function (item) {
         return {
           sonarProjectKey: String(item.sonarProjectKey || '').trim(),
           sonarProjectBaseDir: String(item.sonarProjectBaseDir || '').trim()
         };
       })
-      .filter(function(item) {
+      .filter(function (item) {
         return !!item.sonarProjectKey;
       })
   };
