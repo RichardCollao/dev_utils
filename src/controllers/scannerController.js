@@ -5,6 +5,7 @@ const { randomUUID } = require('node:crypto');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const { logApp } = require('../utils/logger');
+const { getGlobalSonarHostUrl } = require('../utils/envConfig');
 const {
   GLOBAL_FILE_NAME,
   ensureRootUploadsDir,
@@ -24,7 +25,7 @@ function isValidProjectKey(value = '') {
   if (!projectKey) return false;
   if (projectKey.length > 400) return false;
   if (!/^[A-Za-z0-9._:-]+$/.test(projectKey)) return false;
-  return /[^0-9]/.test(projectKey);
+  return /\D/.test(projectKey);
 }
 
 function normalizeList(rawValue = '') {
@@ -201,9 +202,12 @@ function resolveWorkspacePath(storedPath = '') {
   const raw = String(storedPath || '').trim();
   if (!raw) return '';
 
-  const withoutWorkspacePrefix = raw.startsWith('/workspace/')
-    ? raw.slice('/workspace/'.length)
-    : (raw === '/workspace' ? '' : raw);
+  let withoutWorkspacePrefix = raw;
+  if (raw.startsWith('/workspace/')) {
+    withoutWorkspacePrefix = raw.slice('/workspace/'.length);
+  } else if (raw === '/workspace') {
+    withoutWorkspacePrefix = '';
+  }
 
   const cleanRelative = withoutWorkspacePrefix.replace(/^\/+/, '');
   const resolved = path.resolve(WORKSPACE_BASE_DIR, cleanRelative || '.');
@@ -285,7 +289,7 @@ async function buildScannerConfig(payload) {
   }
 
   const sonarToken = String(globalConfig.sonarToken || '').trim();
-  const sonarHostUrl = resolveRuntimeSonarHostUrl(globalConfig.sonarHostUrl);
+  const sonarHostUrl = resolveRuntimeSonarHostUrl(getGlobalSonarHostUrl());
   const projectBaseDir = resolveWorkspacePath(projectConfig.sonarProjectBaseDir);
   const workingDirectory = resolveWorkingDir(globalConfig, projectConfig);
 

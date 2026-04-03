@@ -1,6 +1,7 @@
 const homeModel = require('../models/homeModel');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { getGlobalSonarHostUrl } = require('../utils/envConfig');
 const {
   ROOT_UPLOADS_DIR,
   GLOBAL_FILE_NAME,
@@ -14,7 +15,6 @@ const WORKSPACE_BASE_DIR = '/workspace';
 
 const REQUIRED_GLOBAL_FIELDS = [
   'sonarToken',
-  'sonarHostUrl',
   'sonarWorkingDirectory'
 ];
 
@@ -27,9 +27,12 @@ function resolveWorkspacePath(storedPath = '') {
   const raw = String(storedPath || '').trim();
   if (!raw) return '';
 
-  const withoutWorkspacePrefix = raw.startsWith('/workspace/')
-    ? raw.slice('/workspace/'.length)
-    : (raw === '/workspace' ? '' : raw);
+  let withoutWorkspacePrefix = raw;
+  if (raw.startsWith('/workspace/')) {
+    withoutWorkspacePrefix = raw.slice('/workspace/'.length);
+  } else if (raw === '/workspace') {
+    withoutWorkspacePrefix = '';
+  }
 
   const cleanRelative = withoutWorkspacePrefix.replace(/^\/+/, '');
   const resolved = path.resolve(WORKSPACE_BASE_DIR, cleanRelative || '.');
@@ -81,9 +84,10 @@ async function getGlobalConfig(req, res) {
   try {
     await ensureUploadsDir();
 
+    const sonarHostUrl = getGlobalSonarHostUrl();
     let data = {
       sonarToken: '',
-      sonarHostUrl: '',
+      sonarHostUrl,
       sonarWorkingDirectory: ''
     };
 
@@ -92,7 +96,7 @@ async function getGlobalConfig(req, res) {
       const parsed = JSON.parse(raw);
       data = {
         sonarToken: parsed.sonarToken || '',
-        sonarHostUrl: parsed.sonarHostUrl || '',
+        sonarHostUrl,
         sonarWorkingDirectory: parsed.sonarWorkingDirectory || ''
       };
     } catch (error) {
@@ -110,6 +114,7 @@ async function saveGlobalConfig(req, res) {
   try {
     const payload = req.body || {};
     const missing = REQUIRED_GLOBAL_FIELDS.filter(function(field) { return !payload[field] || !String(payload[field]).trim(); });
+    const sonarHostUrl = getGlobalSonarHostUrl();
 
     if (missing.length > 0) {
       return res.status(400).json({
@@ -120,7 +125,6 @@ async function saveGlobalConfig(req, res) {
 
     const data = {
       sonarToken: String(payload.sonarToken).trim(),
-      sonarHostUrl: String(payload.sonarHostUrl || '').trim(),
       sonarWorkingDirectory: String(payload.sonarWorkingDirectory || '').trim()
     };
 
@@ -150,7 +154,7 @@ async function saveGlobalConfig(req, res) {
       }
     }
 
-    const lowerHost = String(data.sonarHostUrl || '').trim().toLowerCase();
+    const lowerHost = sonarHostUrl.toLowerCase();
     if (
       lowerHost.startsWith('http://localhost')
       || lowerHost.startsWith('https://localhost')
@@ -160,6 +164,10 @@ async function saveGlobalConfig(req, res) {
       || lowerHost.startsWith('https://[::1]')
     ) {
       warnings.push("En Docker, 'localhost' apunta al contenedor app. Se usará 'sonarqube' internamente para conectar con SonarQube.");
+    }
+
+    if (!sonarHostUrl) {
+      warnings.push("No se encontró 'globalSonarHostUrl' en el archivo .env.");
     }
 
     const warning = warnings.length > 0 ? warnings.join(' | ') : null;

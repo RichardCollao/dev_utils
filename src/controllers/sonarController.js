@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { logApp } = require('../utils/logger');
+const { getGlobalSonarHostUrl } = require('../utils/envConfig');
 const {
   GLOBAL_FILE_NAME,
   ensureRootUploadsDir,
@@ -20,7 +21,7 @@ function isValidProjectKeyForFileName(value = '') {
   if (!projectKey) return false;
   if (projectKey.length > 400) return false;
   if (!/^[A-Za-z0-9._:-]+$/.test(projectKey)) return false;
-  return /[^0-9]/.test(projectKey);
+  return /\D/.test(projectKey);
 }
 
 async function readJsonFile(filePath) {
@@ -129,7 +130,7 @@ async function postToSonarApi(sonarHostUrl, sonarToken, endpoint, payload = {}) 
 async function resolveConfig() {
   const globalConfig = await getGlobalConfig();
 
-  const sonarHostUrl = resolveRuntimeSonarHostUrl(globalConfig.sonarHostUrl);
+  const sonarHostUrl = resolveRuntimeSonarHostUrl(getGlobalSonarHostUrl());
   const sonarToken = String(globalConfig.sonarToken || '').trim();
 
   if (!sonarHostUrl || !sonarToken) {

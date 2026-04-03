@@ -8,11 +8,7 @@
                 <label for="globalSonarToken" class="form-label">sonarToken</label>
                 <input type="text" class="form-control form-control-sm" id="globalSonarToken" required>
             </div>
-            <div class="col-12 col-md-3">
-                <label for="globalSonarHostUrl" class="form-label">sonarHostUrl</label>
-                <input type="url" class="form-control form-control-sm" id="globalSonarHostUrl" value="http://localhost:9000" readonly required disabled>
-            </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-7">
                 <label for="globalSonarWorkingDirectory" class="form-label">sonarWorkingDirectory</label>
                 <div class="input-group input-group-sm mb-3">
                     <span class="input-group-text">/workspace/</span>
@@ -117,12 +113,11 @@
         request('/api/projects/global', 'GET', null, function (response) {
             const data = response?.data || {};
             const tokenInput = document.getElementById('globalSonarToken');
-            const hostUrlInput = document.getElementById('globalSonarHostUrl');
             const workingDirInput = document.getElementById('globalSonarWorkingDirectory');
 
             if (tokenInput) tokenInput.value = data.sonarToken || '';
-            if (hostUrlInput && data.sonarHostUrl) hostUrlInput.value = data.sonarHostUrl;
             if (workingDirInput && data.sonarWorkingDirectory) workingDirInput.value = data.sonarWorkingDirectory;
+            window.globalSonarHostUrl = data.sonarHostUrl || '';
         });
     }
 
@@ -133,7 +128,6 @@
 
         const payload = {
             sonarToken: document.getElementById('globalSonarToken').value.trim() || '',
-            sonarHostUrl: document.getElementById('globalSonarHostUrl').value.trim() || '',
             sonarWorkingDirectory: document.getElementById('globalSonarWorkingDirectory').value.trim() || ''
         };
 
