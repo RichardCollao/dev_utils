@@ -96,14 +96,18 @@ async function getBundle() {
 
 async function writeBundle(bundleInput, directoryRelative) {
   const safeBundle = normalizeBundle(bundleInput);
-  const targetDirectory = normalizeDirectory(directoryRelative || safeBundle.global.globalConfigDirectory);
+  const rawDir = String(directoryRelative || '').trim() || safeBundle.global.globalConfigDirectory;
+  const targetDirectory = normalizeDirectory(rawDir);
   const location = buildConfigFilePath(targetDirectory);
+
+  console.log('[configStore] writeBundle', { directoryRelative, targetDirectory, filePath: location.filePath });
 
   safeBundle.global.globalConfigDirectory = targetDirectory;
 
   await fs.mkdir(location.absoluteDirectory, { recursive: true });
   await fs.writeFile(location.filePath, JSON.stringify(safeBundle, null, 2), 'utf8');
 
+  console.log('[configStore] writeBundle success', { filePath: location.filePath });
   return { bundle: safeBundle, ...location };
 }
 
