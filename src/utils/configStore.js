@@ -3,7 +3,6 @@ const path = require('node:path');
 
 const WORKSPACE_BASE_DIR = '/workspace';
 const CONFIG_FILE_NAME = 'config.json';
-const DEFAULT_CONFIG_DIRECTORY = 'sonar/config_directory';
 
 function resolveWorkspacePath(storedPath = '') {
   const raw = String(storedPath || '').trim();
@@ -32,10 +31,10 @@ function resolveWorkspacePath(storedPath = '') {
 
 function normalizeDirectory(value = '') {
   const normalized = String(value || '').trim().replace(/^\/workspace\/?/, '').replace(/^\/+/, '');
-  return normalized || DEFAULT_CONFIG_DIRECTORY;
+  return normalized || 'sonar/config_directory';
 }
 
-function buildConfigFilePath(directoryRelative = DEFAULT_CONFIG_DIRECTORY) {
+function buildConfigFilePath(directoryRelative = 'sonar/config_directory') {
   const cleanDirectory = normalizeDirectory(directoryRelative);
   const absoluteDirectory = resolveWorkspacePath(cleanDirectory);
   return {
@@ -73,7 +72,7 @@ function normalizeBundle(raw) {
 }
 
 async function getBundle() {
-  const location = buildConfigFilePath(DEFAULT_CONFIG_DIRECTORY);
+  const location = buildConfigFilePath('sonar/config_directory');
 
   let raw;
   try {
@@ -110,7 +109,6 @@ async function writeBundle(bundleInput, directoryRelative) {
 
 module.exports = {
   CONFIG_FILE_NAME,
-  DEFAULT_CONFIG_DIRECTORY,
   resolveWorkspacePath,
   getBundle,
   writeBundle
