@@ -1,4 +1,4 @@
-const { getGlobalSonarHostUrl } = require('../utils/envConfig');
+const { getGlobalSonarHostUrl, getWorkspaceBaseDir } = require('../utils/envConfig');
 const {
   getBundle,
   writeBundle
@@ -8,6 +8,20 @@ const REQUIRED_PROJECT_FIELDS = [
   'sonarProjectKey',
   'sonarProjectBaseDir'
 ];
+
+function renderSonar(req, res) {
+  res.render('sonar', { workspaceBaseDir: getWorkspaceBaseDir() });
+}
+
+async function getProjects(req, res) {
+  try {
+    const { bundle } = await getBundle();
+    const projects = Array.isArray(bundle?.projects) ? bundle.projects : [];
+    res.json({ success: true, data: projects });
+  } catch {
+    res.status(500).json({ success: false, message: 'No fue posible listar los proyectos.' });
+  }
+}
 
 function isValidProjectKeyForFileName(value = '') {
   const projectKey = String(value || '').trim();
@@ -393,6 +407,8 @@ async function deleteProject(req, res) {
 }
 
 module.exports = {
+  renderSonar,
+  getProjects,
   createProject,
   updateProject,
   deleteProject

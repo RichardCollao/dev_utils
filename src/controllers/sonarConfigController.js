@@ -15,19 +15,8 @@ const REQUIRED_GLOBAL_FIELDS = [
   'sonarToken'
 ];
 
-function renderHome(req, res) {
-  res.render('home', { workspaceBaseDir: getWorkspaceBaseDir() });
-}
-
-async function getProjects(req, res) {
-  try {
-    const { bundle } = await getBundle();
-    const projects = Array.isArray(bundle?.projects) ? bundle.projects : [];
-
-    res.json({ success: true, data: projects });
-  } catch {
-    res.status(500).json({ success: false, message: 'No fue posible listar los proyectos.' });
-  }
+function renderSonarConfig(req, res) {
+  res.render('sonar_config', { workspaceBaseDir: getWorkspaceBaseDir() });
 }
 
 async function getGlobalConfig(req, res) {
@@ -38,7 +27,7 @@ async function getGlobalConfig(req, res) {
     const { bundle } = await getBundle();
     const global = bundle?.global || {};
 
-    let data = {
+    const data = {
       sonarToken: String(global.sonarToken || '').trim(),
       sonarHostUrl,
       sonarWorkingDirectory,
@@ -157,8 +146,7 @@ async function saveTheme(req, res) {
 }
 
 module.exports = {
-  renderHome,
-  getProjects,
+  renderSonarConfig,
   getGlobalConfig,
   saveGlobalConfig,
   saveTheme

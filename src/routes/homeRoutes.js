@@ -1,17 +1,20 @@
 const express = require('express');
-const homeController = require('../controllers/homeController');
-const gitController = require('../controllers/gitController');
 const sonarController = require('../controllers/sonarController');
+const sonarConfigController = require('../controllers/sonarConfigController');
+const gitController = require('../controllers/gitController');
 const scannerController = require('../controllers/scannerController');
 const fileExplorerController = require('../controllers/fileExplorerController');
 
 const router = express.Router();
 
-router.get('/', homeController.renderHome);
-router.get('/api/projects', homeController.getProjects);
-router.get('/api/projects/global', homeController.getGlobalConfig);
-router.post('/api/projects/global', homeController.saveGlobalConfig);
-router.post('/api/theme', homeController.saveTheme);
+router.get('/', (req, res) => res.redirect('/sonar'));
+router.get('/sonar', sonarController.renderSonar);
+router.get('/sonar_config', sonarConfigController.renderSonarConfig);
+
+router.get('/api/projects', sonarController.getProjects);
+router.get('/api/projects/global', sonarConfigController.getGlobalConfig);
+router.post('/api/projects/global', sonarConfigController.saveGlobalConfig);
+router.post('/api/theme', sonarConfigController.saveTheme);
 router.post('/api/projects', sonarController.createProject);
 router.put('/api/projects/:projectKey', sonarController.updateProject);
 router.delete('/api/projects/:projectKey', sonarController.deleteProject);
