@@ -4,7 +4,7 @@ src/public/vendor/
 
 # Variables de entorno
 .env
-.env.*
+
 !.env.example
 
 # Logs
