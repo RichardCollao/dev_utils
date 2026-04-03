@@ -12,8 +12,7 @@
                 <label for="globalSonarWorkingDirectory" class="form-label">sonarWorkingDirectory</label>
                 <div class="input-group input-group-sm mb-3">
                     <span class="input-group-text">/workspace/</span>
-                    <input type="text" class="form-control form-control-sm" id="globalSonarWorkingDirectory"
-                        value="sonar/working" required readonly disabled>
+                    <input type="text" class="form-control form-control-sm" id="globalSonarWorkingDirectory" required readonly disabled>
                     <button type="button" class="btn btn-outline-secondary"
                         onclick="openGlobalFileExplorerModal('globalSonarWorkingDirectory')"><i
                             class="bi bi-folder2-open"></i></button>
@@ -23,8 +22,7 @@
                 <label for="globalConfigDirectory" class="form-label">configDirectory</label>
                 <div class="input-group input-group-sm mb-3">
                     <span class="input-group-text">/workspace/</span>
-                    <input type="text" class="form-control form-control-sm" id="globalConfigDirectory" value="sonar/"
-                        required readonly disabled>
+                    <input type="text" class="form-control form-control-sm" id="globalConfigDirectory" required readonly disabled>
                     <button type="button" class="btn btn-outline-secondary"
                         onclick="openGlobalFileExplorerModal('globalConfigDirectory')"><i
                             class="bi bi-folder2-open"></i></button>
@@ -126,9 +124,9 @@
         request('/api/projects/global', 'GET', null, function (response) {
             const data = response?.data || {};
             document.getElementById('globalSonarToken').value = data.sonarToken || '';
-            document.getElementById('globalSonarWorkingDirectory').value = data.sonarWorkingDirectory || '';
-            document.getElementById('globalConfigDirectory').value = data.globalConfigDirectory || '';
-            window.globalSonarHostUrl = data.sonarHostUrl || '';
+            document.getElementById('globalSonarWorkingDirectory').value = data.sonarWorkingDirectory || 'sonar/temp';
+            document.getElementById('globalConfigDirectory').value = data.globalConfigDirectory || 'sonar';
+            window.globalSonarHostUrl = data.sonarHostUrl;
         });
     }
 
