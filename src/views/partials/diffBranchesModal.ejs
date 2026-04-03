@@ -46,8 +46,6 @@
       selBase.innerHTML = options;
       selCompare.innerHTML = options;
 
-      console.log('response.baseBranch :>> ', response.baseBranch);
-      console.log('response.currentBranch :>> ', response.currentBranch);
       if (response.baseBranch && response.data.includes(response.baseBranch)) {
         selBase.value = response.baseBranch;
       }

@@ -65,8 +65,6 @@
 
         const projectKeyValue = document.getElementById('sonarProjectKey')?.value?.trim() || '';
         const projectBaseDirValue = document.getElementById('sonarProjectBaseDir')?.value?.trim() || '';
-        console.log('[saveProject] values', { projectKeyValue, projectBaseDirValue });
-        sendClientLog('info', '[saveProject] values', { projectKeyValue, projectBaseDirValue });
 
         if (!projectKeyValue || !projectBaseDirValue) {
             Swal.fire({
@@ -91,29 +89,18 @@
             sonarProjectBaseDir: projectBaseDirValue
         };
 
-        console.log('[saveProject] request payload', payload);
-        sendClientLog('info', '[saveProject] request payload', payload);
-
         request('/api/projects', 'POST', payload, function (response) {
-            console.log('[saveProject] success callback', response);
-            sendClientLog('info', '[saveProject] success callback', response);
             newProjectForm.reset();
             const modalElement = document.getElementById('newProjectModal');
             if (modalElement && window.bootstrap?.Modal) {
-                console.log('[saveProject] hide modal');
-                sendClientLog('info', '[saveProject] hide modal');
                 window.bootstrap.Modal.getOrCreateInstance(modalElement).hide();
             }
 
             if (typeof loadProjects === 'function') {
-                console.log('[saveProject] schedule loadProjects');
-                sendClientLog('info', '[saveProject] schedule loadProjects');
                 setTimeout(loadProjects, 100);
             }
 
             if (window.Swal?.fire) {
-                console.log('[saveProject] show success swal');
-                sendClientLog('info', '[saveProject] show success swal');
                 window.Swal.fire({
                     icon: 'success',
                     title: 'Proyecto creado',
