@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="es">
+<%- include('../partials/head', { pageTitle: 'DevUtils' }) %>
+
+<body>
+  <%- include('../partials/loading') %>
+  <%- include('../partials/navbar', { activePage: 'sonar' }) %>
+  <main class="container py-4">
+    <%- include('inicio') %>
+  </main>
+  <%- include('../partials/foot') %>
+  <script src="/js/scanner.js?v=20260324a"></script>
+</body>
+
+</html>

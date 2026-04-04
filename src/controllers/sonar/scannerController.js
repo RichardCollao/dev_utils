@@ -4,11 +4,11 @@ const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
-const { getSonarHostUrl } = require('../utils/envConfig');
+const { getSonarHostUrl } = require('../../utils/envConfig');
 const {
   getBundle,
   resolveWorkspacePath
-} = require('../utils/configStore');
+} = require('../../utils/configStore');
 const SESSION_TTL_MS = 60 * 1000;
 const scannerSessions = new Map();
 

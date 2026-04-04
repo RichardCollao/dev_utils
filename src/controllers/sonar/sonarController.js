@@ -1,8 +1,8 @@
-const { getSonarHostUrl, getWorkspaceBaseDir } = require('../utils/envConfig');
+const { getSonarHostUrl, getWorkspaceBaseDir } = require('../../utils/envConfig');
 const {
   getBundle,
   writeBundle
-} = require('../utils/configStore');
+} = require('../../utils/configStore');
 
 const REQUIRED_PROJECT_FIELDS = [
   'sonarProjectKey',
@@ -10,7 +10,7 @@ const REQUIRED_PROJECT_FIELDS = [
 ];
 
 function renderSonar(req, res) {
-  res.render('sonar', { workspaceBaseDir: getWorkspaceBaseDir() });
+  res.render('sonar/sonar', { workspaceBaseDir: getWorkspaceBaseDir() });
 }
 
 async function getProjects(req, res) {

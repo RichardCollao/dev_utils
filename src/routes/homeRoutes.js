@@ -1,9 +1,9 @@
 const express = require('express');
-const sonarController = require('../controllers/sonarController');
-const sonarConfigController = require('../controllers/sonarConfigController');
+const sonarController = require('../controllers/sonar/sonarController');
+const sonarConfigController = require('../controllers/sonar/sonarConfigController');
 const appConfigController = require('../controllers/appConfigController');
 const gitController = require('../controllers/gitController');
-const scannerController = require('../controllers/scannerController');
+const scannerController = require('../controllers/sonar/scannerController');
 const fileExplorerController = require('../controllers/fileExplorerController');
 
 const router = express.Router();

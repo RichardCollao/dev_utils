@@ -4,21 +4,21 @@ const {
   getSonarWorkingDirectory,
   getSonarConfigPath,
   getWorkspaceBaseDir
-} = require('../utils/envConfig');
+} = require('../../utils/envConfig');
 const {
   resolveWorkspacePath,
   getBundle,
   writeBundle,
   getAppBundle,
   writeAppBundle
-} = require('../utils/configStore');
+} = require('../../utils/configStore');
 
 const REQUIRED_GLOBAL_FIELDS = [
   'sonarToken'
 ];
 
 function renderSonarConfig(req, res) {
-  res.render('sonar_config', { workspaceBaseDir: getWorkspaceBaseDir() });
+  res.render('sonar/sonar_config', { workspaceBaseDir: getWorkspaceBaseDir() });
 }
 
 async function getGlobalConfig(req, res) {

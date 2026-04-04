@@ -4,7 +4,7 @@ const express = require('express');
 const http = require('node:http');
 const path = require('node:path');
 const homeRoutes = require('./src/routes/homeRoutes');
-const scannerController = require('./src/controllers/scannerController');
+const scannerController = require('./src/controllers/sonar/scannerController');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
