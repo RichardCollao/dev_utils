@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('node:http');
 const path = require('node:path');
-const homeRoutes = require('./src/routes/homeRoutes');
+const homeRoutes = require('./src/routes/routes');
 const scannerController = require('./src/controllers/sonar/scannerController');
 const app = express();
 const PORT = process.env.PORT || 3000;
