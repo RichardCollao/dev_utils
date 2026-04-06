@@ -1,6 +1,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { promisify } = require('node:util');
+const { execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
@@ -11,6 +13,7 @@ const SESSION_TTL_MS = 60 * 1000;
 const gitleaksSessions = new Map();
 const WORKSPACE_BASE_DIR = path.resolve(getWorkspaceBaseDir());
 const GITLEAKS_WORKSPACE_BASE_DIR = '/workspace';
+const execFileAsync = promisify(execFile);
 
 let gitleaksWss = null;
 
@@ -89,6 +92,218 @@ function toContainerWorkspacePath(hostAbsolutePath) {
   return `${GITLEAKS_WORKSPACE_BASE_DIR}/${normalizedRelative}`;
 }
 
+function toHostWorkspacePath(containerAbsolutePath) {
+  const raw = toPosixPath(String(containerAbsolutePath || '').trim());
+
+  if (!raw) return '';
+
+  if (raw === GITLEAKS_WORKSPACE_BASE_DIR || raw.startsWith(`${GITLEAKS_WORKSPACE_BASE_DIR}/`)) {
+    const relative = raw.slice(GITLEAKS_WORKSPACE_BASE_DIR.length).replace(/^\/+/, '');
+    return relative ? path.resolve(WORKSPACE_BASE_DIR, relative) : WORKSPACE_BASE_DIR;
+  }
+
+  return path.resolve(raw);
+}
+
+function stripAnsi(text) {
+  return String(text || '').replaceAll(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+function parseGitleaksFindings(rawOutput) {
+  const cleanOutput = stripAnsi(rawOutput).replaceAll('\r', '');
+  const lines = cleanOutput.split('\n');
+  const findings = [];
+  let current = null;
+
+  const findingRegex = /^Finding:\s*(.*)$/;
+  const secretRegex = /^Secret:\s*(.*)$/;
+  const ruleRegex = /^RuleID:\s*(.*)$/;
+  const entropyRegex = /^Entropy:\s*(.*)$/;
+  const fileRegex = /^File:\s*(.*)$/;
+  const lineRegex = /^Line:\s*(.*)$/;
+  const fingerprintRegex = /^Fingerprint:\s*(.*)$/;
+
+  function pushCurrent() {
+    if (!current) return;
+
+    if (current.finding || current.secret || current.ruleId || current.file) {
+      findings.push({
+        finding: current.finding || '',
+        secret: current.secret || '',
+        ruleId: current.ruleId || '',
+        entropy: current.entropy || '',
+        file: current.file || '',
+        line: current.line || '',
+        fingerprint: current.fingerprint || ''
+      });
+    }
+
+    current = null;
+  }
+
+  lines.forEach(function(rawLine) {
+    const line = String(rawLine || '');
+    const findingMatch = findingRegex.exec(line);
+
+    if (findingMatch) {
+      pushCurrent();
+      current = { finding: findingMatch[1] || '' };
+      return;
+    }
+
+    if (!current) return;
+
+    const secretMatch = secretRegex.exec(line);
+    if (secretMatch) {
+      current.secret = secretMatch[1] || '';
+      return;
+    }
+
+    const ruleMatch = ruleRegex.exec(line);
+    if (ruleMatch) {
+      current.ruleId = ruleMatch[1] || '';
+      return;
+    }
+
+    const entropyMatch = entropyRegex.exec(line);
+    if (entropyMatch) {
+      current.entropy = entropyMatch[1] || '';
+      return;
+    }
+
+    const fileMatch = fileRegex.exec(line);
+    if (fileMatch) {
+      current.file = fileMatch[1] || '';
+      return;
+    }
+
+    const lineMatch = lineRegex.exec(line);
+    if (lineMatch) {
+      current.line = lineMatch[1] || '';
+      return;
+    }
+
+    const fingerprintMatch = fingerprintRegex.exec(line);
+    if (fingerprintMatch) {
+      current.fingerprint = fingerprintMatch[1] || '';
+    }
+  });
+
+  pushCurrent();
+  return findings;
+}
+
+async function getRepoRootForPath(targetPath, cache) {
+  const normalizedPath = path.resolve(targetPath);
+  const cacheKey = normalizedPath;
+
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
+  try {
+    const result = await execFileAsync('git', ['-C', normalizedPath, 'rev-parse', '--show-toplevel']);
+    const root = String(result.stdout || '').trim();
+    const repoRoot = root ? path.resolve(root) : null;
+    cache.set(cacheKey, repoRoot);
+    return repoRoot;
+  } catch {
+    cache.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function getBlameMetadata(filePath, lineNumber) {
+  const resolvedFile = path.resolve(filePath);
+  const resolvedLine = Number.parseInt(String(lineNumber || ''), 10);
+
+  if (!Number.isFinite(resolvedLine) || resolvedLine < 1) {
+    return null;
+  }
+
+  const repoRoot = await getRepoRootForPath(path.dirname(resolvedFile), getBlameMetadata.repoCache);
+  if (!repoRoot) return null;
+
+  const relativeFilePath = path.relative(repoRoot, resolvedFile);
+  if (!relativeFilePath || relativeFilePath.startsWith('..')) {
+    return null;
+  }
+
+  try {
+    const result = await execFileAsync('git', [
+      '-C',
+      repoRoot,
+      'blame',
+      '--porcelain',
+      '-L',
+      `${resolvedLine},${resolvedLine}`,
+      '--',
+      relativeFilePath
+    ]);
+
+    const output = String(result.stdout || '');
+    const commitHash = (/^([0-9a-f]{7,40})\s/m.exec(output) || [])[1] || '';
+    const author = (/^author\s+(.+)$/m.exec(output) || [])[1] || '';
+    const authorMail = (/^author-mail\s+<(.+)>$/m.exec(output) || [])[1] || '';
+    const authorTime = Number.parseInt((/^author-time\s+(\d+)$/m.exec(output) || [])[1] || '', 10);
+    const summary = (/^summary\s+(.+)$/m.exec(output) || [])[1] || '';
+
+    return {
+      repoRoot,
+      commitHash,
+      author,
+      authorMail,
+      authorDate: Number.isFinite(authorTime) ? new Date(authorTime * 1000).toISOString() : '',
+      summary
+    };
+  } catch {
+    return null;
+  }
+}
+
+getBlameMetadata.repoCache = new Map();
+
+async function enrichFindingsWithGitMetadata(findings, sessionConfig) {
+  const list = Array.isArray(findings) ? findings : [];
+  if (!list.length) return [];
+
+  const sourceContainerDirectory = String(sessionConfig?.sourceContainerDirectory || '').trim();
+  const sourceHostDirectory = String(sessionConfig?.sourceDirectory || '').trim();
+
+  const enriched = [];
+
+  for (const finding of list) {
+    const containerFilePath = String(finding.file || '').trim();
+    let hostFilePath = toHostWorkspacePath(containerFilePath);
+
+    if (!containerFilePath && sourceHostDirectory) {
+      hostFilePath = sourceHostDirectory;
+    }
+
+    if (sourceContainerDirectory && containerFilePath.startsWith(`${sourceContainerDirectory}/`) && sourceHostDirectory) {
+      const relative = containerFilePath.slice(sourceContainerDirectory.length).replace(/^\/+/, '');
+      hostFilePath = path.resolve(sourceHostDirectory, relative);
+    }
+
+    let git = null;
+
+    try {
+      assertInsideWorkspace(hostFilePath);
+      git = await getBlameMetadata(hostFilePath, finding.line);
+    } catch {
+      git = null;
+    }
+
+    enriched.push({
+      ...finding,
+      hostFile: hostFilePath,
+      git
+    });
+  }
+
+  return enriched;
+}
+
 async function buildGitleaksConfig(payload) {
   const selectedDirectory = String(payload.directory || payload.sourceDirectory || '').trim();
 
@@ -104,7 +319,7 @@ async function buildGitleaksConfig(payload) {
 
   const sourceContainerDirectory = toContainerWorkspacePath(sourceDirectory);
   const gitleaksShellScript = [
-    "if gitleaks dir --help | grep -q -- '--no-git'; then",
+    'if gitleaks dir --help | grep -q -- --no-git; then',
     '  gitleaks dir --no-git "$1" --verbose;',
     'else',
     '  gitleaks dir "$1" --verbose;',
@@ -212,6 +427,25 @@ function initGitleaksWebSocket(server) {
     const shell = os.platform() === 'win32' ? 'cmd.exe' : '/bin/bash';
 
     let scannerProcess;
+    let scannerOutput = '';
+    let currentScanConfig = null;
+
+    function writeScanCommand(config) {
+      currentScanConfig = config;
+      scannerOutput = '';
+
+      sendSocketMessage(ws, {
+        type: 'info',
+        message: `Iniciando Gitleaks para ${config.sourceDirectory}...\r\n`
+      });
+
+      sendSocketMessage(ws, {
+        type: 'info',
+        message: `$ ${config.displayCommand}\r\n\r\n`
+      });
+
+      scannerProcess.write(`${config.rawCommand}; exit\r`);
+    }
 
     try {
       scannerProcess = pty.spawn(shell, ['-i'], {
@@ -234,25 +468,28 @@ function initGitleaksWebSocket(server) {
     }
 
     if (session) {
-      sendSocketMessage(ws, {
-        type: 'info',
-        message: `Iniciando Gitleaks para ${session.sourceDirectory}...\r\n`
-      });
-
-      sendSocketMessage(ws, {
-        type: 'info',
-        message: `$ ${session.displayCommand}\r\n\r\n`
-      });
-
-      scannerProcess.write(`${session.rawCommand}\r`);
+      writeScanCommand(session);
     }
 
     scannerProcess.onData(function(chunk) {
+      scannerOutput += String(chunk || '');
       sendSocketMessage(ws, { type: 'output', data: chunk });
     });
 
-    scannerProcess.onExit(function(event) {
+    scannerProcess.onExit(async function(event) {
       const exitCode = Number.isFinite(event?.exitCode) ? event.exitCode : 1;
+
+      try {
+        const findings = parseGitleaksFindings(scannerOutput);
+        const findingsWithGit = await enrichFindingsWithGitMetadata(findings, currentScanConfig || session || null);
+
+        sendSocketMessage(ws, {
+          type: 'report',
+          findings: findingsWithGit,
+          totalFindings: findingsWithGit.length
+        });
+      } catch {
+      }
 
       sendSocketMessage(ws, {
         type: 'exit',
@@ -283,18 +520,7 @@ function initGitleaksWebSocket(server) {
         (async function() {
           try {
             const config = await buildGitleaksConfig(message.payload || {});
-
-            sendSocketMessage(ws, {
-              type: 'info',
-              message: `Iniciando Gitleaks para ${config.sourceDirectory}...\r\n`
-            });
-
-            sendSocketMessage(ws, {
-              type: 'info',
-              message: `$ ${config.displayCommand}\r\n\r\n`
-            });
-
-            scannerProcess.write(`${config.rawCommand}\r`);
+            writeScanCommand(config);
           } catch (error) {
             sendSocketMessage(ws, {
               type: 'error',

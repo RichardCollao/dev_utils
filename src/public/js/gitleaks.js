@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
   runButton = byId('btnRunGitleaks');
   clearConsoleButton = byId('btnClearGitleaksConsole');
+  reportButton = byId('btnOpenGitleaksReport');
 
   ensureTerminal();
   setRunButtonState(false);
@@ -11,6 +12,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (clearConsoleButton) {
     clearConsoleButton.addEventListener('click', clearConsole);
+  }
+
+  if (reportButton) {
+    reportButton.addEventListener('click', function () {
+      openReportModal();
+    });
   }
 
   globalThis.addEventListener('resize', function () {
@@ -29,9 +36,12 @@ let fitAddon = null;
 let socket = null;
 let runButton = null;
 let clearConsoleButton = null;
+let reportButton = null;
 let terminalInputDisposable = null;
 let pendingRunPayload = null;
 let resizeTimeoutId = null;
+let latestFindingsReport = [];
+let reportModalInstance = null;
 
 function byId(id) {
   return document.getElementById(id);
@@ -41,6 +51,94 @@ function setRunButtonState(disabled) {
   if (runButton) {
     runButton.disabled = !!disabled;
   }
+}
+
+function setReportButtonState(disabled) {
+  if (reportButton) {
+    reportButton.disabled = !!disabled;
+  }
+}
+
+function getReportModal() {
+  const modalElement = byId('gitleaksReportModal');
+  if (!modalElement || typeof bootstrap === 'undefined' || !bootstrap.Modal) return null;
+
+  if (!reportModalInstance) {
+    reportModalInstance = new bootstrap.Modal(modalElement);
+  }
+
+  return reportModalInstance;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function formatGitMeta(git) {
+  if (!git) return '<span class="text-muted">Sin datos de Git</span>';
+
+  const author = escapeHtml(git.author || '');
+  const email = escapeHtml(git.authorMail || '');
+  const commit = escapeHtml(git.commitHash || '');
+  const summary = escapeHtml(git.summary || '');
+  const date = git.authorDate ? new Date(git.authorDate).toLocaleString() : '';
+  const safeDate = escapeHtml(date);
+  const authorEmail = email ? `&lt;${email}&gt;` : '';
+
+  return [
+    `<div><strong>Autor:</strong> ${author || 'N/A'} ${authorEmail}</div>`,
+    `<div><strong>Fecha:</strong> ${safeDate || 'N/A'}</div>`,
+    `<div><strong>Commit:</strong> <code>${commit || 'N/A'}</code></div>`,
+    `<div><strong>Resumen:</strong> ${summary || 'N/A'}</div>`
+  ].join('');
+}
+
+function renderFindingsReport(findings) {
+  latestFindingsReport = Array.isArray(findings) ? findings : [];
+
+  const body = byId('gitleaksReportBody');
+  const count = byId('gitleaksReportCount');
+  if (!body || !count) return;
+
+  count.textContent = `${latestFindingsReport.length} hallazgo${latestFindingsReport.length === 1 ? '' : 's'}`;
+
+  if (!latestFindingsReport.length) {
+    body.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-2"></i>No se detectaron hallazgos.</div>';
+    setReportButtonState(false);
+    return;
+  }
+
+  body.innerHTML = latestFindingsReport.map(function (item, index) {
+    return `
+      <div class="card mb-3 border-warning-subtle">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><strong>#${index + 1}</strong> ${escapeHtml(item.ruleId || 'rule')}</span>
+          <span class="badge text-bg-warning">Línea ${escapeHtml(item.line || '?')}</span>
+        </div>
+        <div class="card-body">
+          <div class="mb-2"><strong>Archivo:</strong> <code>${escapeHtml(item.file || item.hostFile || '')}</code></div>
+          <div class="mb-2"><strong>Finding:</strong> <code>${escapeHtml(item.finding || '')}</code></div>
+          <div class="mb-2"><strong>Secret:</strong> <code>${escapeHtml(item.secret || '')}</code></div>
+          <div class="mb-2"><strong>Fingerprint:</strong> <code>${escapeHtml(item.fingerprint || '')}</code></div>
+          <hr>
+          ${formatGitMeta(item.git)}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  setReportButtonState(false);
+}
+
+function openReportModal() {
+  const modal = getReportModal();
+  if (!modal) return;
+  modal.show();
 }
 
 function fitTerminal(shouldNotifyResize = true) {
@@ -199,6 +297,12 @@ function connectSocket() {
 
     if (message.type === 'exit') {
       writeLine(`\r\n[Proceso finalizado] código=${message.exitCode}\r\n`);
+      return;
+    }
+
+    if (message.type === 'report') {
+      renderFindingsReport(message.findings || []);
+      openReportModal();
     }
   });
 
@@ -237,6 +341,7 @@ async function runGitleaks() {
   }
 
   setRunButtonState(false);
+  setReportButtonState(true);
 
   writeLine('\r\nPreparando ejecución de Gitleaks...\r\n');
   connectSocket();
