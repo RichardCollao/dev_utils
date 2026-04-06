@@ -4,12 +4,15 @@ const sonarConfigController = require('../controllers/sonar/sonarConfigControlle
 const appConfigController = require('../controllers/app/appConfigController');
 const gitController = require('../controllers/gitController');
 const scannerController = require('../controllers/sonar/scannerController');
+const gitleaksController = require('../controllers/gitleaks/gitleaksController');
+const gitleaksScannerController = require('../controllers/gitleaks/scannerController');
 const fileExplorerController = require('../controllers/fileExplorerController');
 
 const router = express.Router();
 
 router.get('/', (req, res) => res.redirect('/sonar'));
 router.get('/sonar', sonarController.renderSonar);
+router.get('/gitleaks', gitleaksController.renderGitleaks);
 router.get('/sonar_config', sonarConfigController.renderSonarConfig);
 router.get('/app_config', appConfigController.renderAppConfig);
 
@@ -23,6 +26,7 @@ router.delete('/api/projects/:projectKey', sonarController.deleteProject);
 router.get('/api/projects/:projectKey/branches', gitController.getProjectBranches);
 router.get('/api/projects/:projectKey/diff-files', gitController.getProjectDiffFiles);
 router.post('/api/scanner/session', scannerController.createScannerSession);
+router.post('/api/gitleaks/session', gitleaksScannerController.createGitleaksSession);
 router.post('/explorer', fileExplorerController.renderExplorer);
 router.post('/explorer/files', fileExplorerController.listFiles);
 

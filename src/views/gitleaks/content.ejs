@@ -1,0 +1,80 @@
+<!-- Gitleaks -->
+<div class="row mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h3 class="mb-0"><i class="bi bi-shield-lock"></i> Gitleaks</h3>
+  </div>
+  <hr>
+
+  <div class="col-md-10">
+    <label for="txtGitleaksDirectory" class="form-label">DIRECTORIO</label>
+    <div class="input-group input-group-sm">
+      <input type="text" id="txtGitleaksDirectory" class="form-control" placeholder="Seleccionar directorio"
+        readonly>
+      <button type="button" class="btn btn-outline-secondary" onclick="openGlobalFileExplorerModal('txtGitleaksDirectory')">
+        <i class="bi bi-folder2-open me-1"></i>Explorar
+      </button>
+    </div>
+  </div>
+
+  <div class="col-md-2 d-flex align-items-end">
+    <button type="button" id="btnRunGitleaks" class="btn btn-sm btn-outline-secondary w-100" disabled>
+      <i class="bi bi-terminal me-2"></i>Gitleaks
+    </button>
+  </div>
+</div>
+
+<hr>
+
+<div class="row mt-3">
+  <div class="col-md-4">
+    <i class="bi bi-terminal"></i> Consola Gitleaks
+  </div>
+  <div class="col-md-8 text-end">
+    <button type="button" id="btnClearGitleaksConsole" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-eraser me-1"></i>Limpiar
+    </button>
+  </div>
+</div>
+
+<div class="row mt-3">
+  <div class="col-md-12">
+    <div id="gitleaksTerminal" class="scanner-terminal">
+      <div id="gitleaksTerminalInner" class="scanner-terminal-inner"></div>
+    </div>
+  </div>
+</div>
+
+<%- include('../sonar/fileExplorerModal') %>
+
+<style>
+  input[readonly] {
+    user-select: none;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const directoryInput = document.querySelector('#txtGitleaksDirectory');
+    if (directoryInput) {
+      directoryInput.addEventListener('input', updateRunGitleaksButtonState);
+      directoryInput.addEventListener('change', updateRunGitleaksButtonState);
+    }
+
+    const modalAcceptButton = document.querySelector('#btnAcceptFileExplorer');
+    if (modalAcceptButton) {
+      modalAcceptButton.addEventListener('click', function () {
+        setTimeout(updateRunGitleaksButtonState, 0);
+      });
+    }
+
+    updateRunGitleaksButtonState();
+  });
+
+  function updateRunGitleaksButtonState() {
+    const directoryInput = document.querySelector('#txtGitleaksDirectory');
+    const button = document.querySelector('#btnRunGitleaks');
+    if (!button) return;
+
+    button.disabled = !(directoryInput && String(directoryInput.value || '').trim());
+  }
+</script>

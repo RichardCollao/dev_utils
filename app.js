@@ -5,6 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const homeRoutes = require('./src/routes/routes');
 const scannerController = require('./src/controllers/sonar/scannerController');
+const gitleaksScannerController = require('./src/controllers/gitleaks/scannerController');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -18,5 +19,6 @@ app.use('/', homeRoutes);
 
 const server = http.createServer(app);
 scannerController.initScannerWebSocket(server);
+gitleaksScannerController.initGitleaksWebSocket(server);
 
 server.listen(PORT);
