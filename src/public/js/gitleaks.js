@@ -108,6 +108,23 @@ function getCommitDisplayValue(git) {
   return commitHash;
 }
 
+function formatDateTime24h(value) {
+  if (!value) return '';
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleString('es-CL', {
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
 function formatGitMeta(git) {
   if (!git) return '<span class="text-muted">Sin datos de Git</span>';
 
@@ -115,7 +132,7 @@ function formatGitMeta(git) {
   const email = escapeHtml(git.authorMail || '');
   const commit = escapeHtml(getCommitDisplayValue(git));
   const summary = escapeHtml(git.summary || '');
-  const date = git.authorDate ? new Date(git.authorDate).toLocaleString() : '';
+  const date = formatDateTime24h(git.authorDate);
   const safeDate = escapeHtml(date);
   const authorEmail = email ? `&lt;${email}&gt;` : '';
 
@@ -257,7 +274,7 @@ function downloadReportPdf() {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  y = addPdfLine(doc, `Generado: ${new Date().toLocaleString()}`, 14, y, pageWidth, 5);
+  y = addPdfLine(doc, `Generado: ${formatDateTime24h(new Date())}`, 14, y, pageWidth, 5);
   y = addPdfLine(doc, `Total hallazgos: ${findings.length}`, 14, y, pageWidth, 5);
   y = addPdfLine(doc, `Archivos analizados: ${latestFilesAnalyzedCount}`, 14, y, pageWidth, 5);
   y += 2;
@@ -285,7 +302,7 @@ function downloadReportPdf() {
       const gitEmail = git.authorMail ? ` <${git.authorMail}>` : '';
       const commitLabel = getCommitDisplayValue(git);
       y = addPdfLine(doc, `Autor: ${git.author || 'N/A'}${gitEmail}`, 14, y, pageWidth, 5);
-      y = addPdfLine(doc, `Fecha: ${git.authorDate ? new Date(git.authorDate).toLocaleString() : 'N/A'}`, 14, y, pageWidth, 5);
+      y = addPdfLine(doc, `Fecha: ${formatDateTime24h(git.authorDate) || 'N/A'}`, 14, y, pageWidth, 5);
       y = addPdfLine(doc, `Commit: ${commitLabel}`, 14, y, pageWidth, 5);
       y = addPdfLine(doc, `Resumen: ${git.summary || 'N/A'}`, 14, y, pageWidth, 5);
     } else {
