@@ -262,13 +262,9 @@ function connectSocket() {
 
       setScannerButtonState(false);
 
-      if (Number(message.exitCode) === 0) {
-        console.log('Setting PDF button ready for project:', activeScanProjectName);
-        setPdfButtonReadyProject(activeScanProjectName);
-      } else {
-        console.log('Scanner failed, disabling PDF button');
-        setPdfButtonReadyProject('');
-      }
+      // Habilitar botón PDF cuando termina la ejecución (independiente del código)
+      console.log('Setting PDF button ready for project:', activeScanProjectName);
+      setPdfButtonReadyProject(activeScanProjectName);
 
       activeScanProjectName = '';
     }

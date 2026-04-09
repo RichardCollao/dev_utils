@@ -1,7 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
   runButton = byId('btnRunGitleaks');
   clearConsoleButton = byId('btnClearGitleaksConsole');
-  reportButton = byId('btnOpenGitleaksReport');
   downloadPdfButton = byId('btnDownloadGitleaksPdf');
 
   ensureTerminal();
@@ -13,12 +12,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (clearConsoleButton) {
     clearConsoleButton.addEventListener('click', clearConsole);
-  }
-
-  if (reportButton) {
-    reportButton.addEventListener('click', function () {
-      openReportModal();
-    });
   }
 
   if (downloadPdfButton) {
@@ -43,7 +36,6 @@ let fitAddon = null;
 let socket = null;
 let runButton = null;
 let clearConsoleButton = null;
-let reportButton = null;
 let downloadPdfButton = null;
 let terminalInputDisposable = null;
 let pendingRunPayload = null;
@@ -52,7 +44,7 @@ let latestFindingsReport = [];
 let latestFilesAnalyzedCount = 0;
 let latestExcludeGitIgnored = true;
 let latestGitIgnoreMessage = 'Se excluyen los archivos definidos en .gitignore.';
-let reportModalInstance = null;
+let gitleaksPdfReadyProject = '';
 
 function byId(id) {
   return document.getElementById(id);
@@ -64,37 +56,25 @@ function setRunButtonState(disabled) {
   }
 }
 
-function setReportButtonState(disabled) {
-  if (reportButton) {
-    reportButton.disabled = !!disabled;
-  }
-}
-
 function setDownloadPdfButtonState(disabled) {
   if (downloadPdfButton) {
     downloadPdfButton.disabled = !!disabled;
   }
 }
 
-function getReportModal() {
-  const modalElement = byId('gitleaksReportModal');
-  if (!modalElement || typeof bootstrap === 'undefined' || !bootstrap.Modal) return null;
-
-  if (!reportModalInstance) {
-    reportModalInstance = new bootstrap.Modal(modalElement);
-  }
-
-  return reportModalInstance;
+function setPdfButtonReadyProject(projectName) {
+  const selectedProject = byId('selGitleaksProject')?.value || '';
+  gitleaksPdfReadyProject = String(projectName || '').trim();
+  
+  console.log('setPdfButtonReadyProject called:', { projectName, selectedProject, gitleaksPdfReadyProject });
+  
+  const pdfEnabled = !!selectedProject && selectedProject === gitleaksPdfReadyProject;
+  console.log('PDF button enabled:', pdfEnabled);
+  
+  setDownloadPdfButtonState(!pdfEnabled);
 }
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
+
 
 function getCommitDisplayValue(git) {
   const commitHash = String(git?.commitHash || '').trim();
@@ -127,58 +107,9 @@ function formatDateTime24h(value) {
   });
 }
 
-function formatGitMeta(git) {
-  if (!git) return '<span class="text-muted">Sin datos de Git</span>';
 
-  const author = escapeHtml(git.author || '');
-  const email = escapeHtml(git.authorMail || '');
-  const commit = escapeHtml(getCommitDisplayValue(git));
-  const summary = escapeHtml(git.summary || '');
-  const date = formatDateTime24h(git.authorDate);
-  const safeDate = escapeHtml(date);
-  const authorEmail = email ? `&lt;${email}&gt;` : '';
 
-  return [
-    `<div><strong>Autor:</strong> ${author || 'N/A'} ${authorEmail}</div>`,
-    `<div><strong>Fecha:</strong> ${safeDate || 'N/A'}</div>`,
-    `<div><strong>Commit:</strong> <code>${commit || 'N/A'}</code></div>`,
-    `<div><strong>Resumen:</strong> ${summary || 'N/A'}</div>`
-  ].join('');
-}
 
-function buildReportSummaryHtml(totalFindings, totalFilesAnalyzed) {
-  const findingsCount = Number.isFinite(Number(totalFindings)) ? Number(totalFindings) : 0;
-  const filesCount = Number.isFinite(Number(totalFilesAnalyzed)) ? Number(totalFilesAnalyzed) : 0;
-  const gitIgnoreBadgeLabel = latestExcludeGitIgnored ? 'Excluidos' : 'Incluidos';
-  const gitIgnoreBadgeClass = latestExcludeGitIgnored
-    ? 'gitleaks-report-badge-files'
-    : 'gitleaks-report-badge-neutral';
-
-  return `
-    <div class="gitleaks-report-summary mt-3">
-      <div class="gitleaks-report-summary-row">
-        <span class="gitleaks-report-summary-label">Hallazgos encontrados</span>
-        <span class="badge gitleaks-report-badge gitleaks-report-badge-findings">${findingsCount}</span>
-      </div>
-      <div class="gitleaks-report-summary-row">
-        <span class="gitleaks-report-summary-label">Archivos analizados</span>
-        <span class="badge gitleaks-report-badge gitleaks-report-badge-files">${filesCount}</span>
-      </div>
-      <div class="gitleaks-report-summary-row">
-        <span class="gitleaks-report-summary-label">Archivos en .gitignore</span>
-        <span class="badge gitleaks-report-badge ${gitIgnoreBadgeClass}">${gitIgnoreBadgeLabel}</span>
-      </div>
-    </div>
-  `;
-}
-
-function updateReportInfoText() {
-  const reportInfoText = byId('gitleaksReportInfoText');
-  if (!reportInfoText) return;
-
-  const suffix = latestGitIgnoreMessage ? ` ${latestGitIgnoreMessage}` : '';
-  reportInfoText.textContent = `Solo se muestran hallazgos detectados.${suffix}`;
-}
 
 function groupFindingsByFile(findings) {
   const fileGroups = new Map();
@@ -212,63 +143,6 @@ function renderFindingsReport(findings, totalFilesAnalyzed = 0, options = {}) {
   latestFilesAnalyzedCount = Number.isFinite(Number(totalFilesAnalyzed)) ? Number(totalFilesAnalyzed) : 0;
   latestExcludeGitIgnored = options.excludeGitIgnored !== false;
   latestGitIgnoreMessage = String(options.gitIgnoreMessage || '').trim();
-
-  const body = byId('gitleaksReportBody');
-  const count = byId('gitleaksReportCount');
-  if (!body || !count) return;
-
-  count.textContent = `${latestFindingsReport.length} hallazgo${latestFindingsReport.length === 1 ? '' : 's'}`;
-  updateReportInfoText();
-
-  if (!latestFindingsReport.length) {
-    body.innerHTML = [
-      '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>No se detectaron hallazgos.</div>',
-      buildReportSummaryHtml(0, latestFilesAnalyzedCount)
-    ].join('');
-    setReportButtonState(false);
-    setDownloadPdfButtonState(false); // Permitir descarga PDF incluso sin hallazgos
-    return;
-  }
-
-  const groupedFindings = groupFindingsByFile(latestFindingsReport);
-
-  body.innerHTML = groupedFindings.map(function (group, groupIndex) {
-    return `
-      <div class="card mb-3 border-primary-subtle">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span><strong>Archivo #${groupIndex + 1}</strong></span>
-          <span class="badge text-bg-primary">${group.findings.length} hallazgo${group.findings.length === 1 ? '' : 's'}</span>
-        </div>
-        <div class="card-body">
-          <div class="mb-3"><strong>Archivo:</strong> <code>${escapeHtml(group.filePath)}</code></div>
-          ${group.findings.map(function(item, findingIndex) {
-            return `
-              <div class="gitleaks-finding-item ${findingIndex > 0 ? 'mt-3 pt-3 border-top' : ''}">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <span><strong>${escapeHtml(item.ruleId || 'rule')}</strong></span>
-                  <span class="badge text-bg-warning">Línea ${escapeHtml(item.line || '?')}</span>
-                </div>
-                <div class="mb-2"><strong>Finding:</strong> <code>${escapeHtml(item.finding || '')}</code></div>
-                <div class="mb-2"><strong>Secret:</strong> <code>${escapeHtml(item.secret || '')}</code></div>
-                <div class="mb-2"><strong>Fingerprint:</strong> <code>${escapeHtml(item.fingerprint || '')}</code></div>
-                <hr>
-                ${formatGitMeta(item.git)}
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  }).join('') + buildReportSummaryHtml(latestFindingsReport.length, latestFilesAnalyzedCount);
-
-  setReportButtonState(false);
-  setDownloadPdfButtonState(false);
-}
-
-function openReportModal() {
-  const modal = getReportModal();
-  if (!modal) return;
-  modal.show();
 }
 
 function getSafePdfName() {
@@ -782,6 +656,13 @@ function connectSocket() {
 
     if (message.type === 'exit') {
       writeLine(`\r\n[Proceso finalizado] código=${message.exitCode}\r\n`);
+      markRunButtonAvailable();
+      
+      // Asegurar que el botón PDF esté habilitado al finalizar
+      const selectedProject = byId('selGitleaksProject')?.value || '';
+      if (selectedProject) {
+        setPdfButtonReadyProject(selectedProject);
+      }
       return;
     }
 
@@ -790,7 +671,12 @@ function connectSocket() {
         excludeGitIgnored: message.excludeGitIgnored !== false,
         gitIgnoreMessage: message.gitIgnoreMessage || ''
       });
-      openReportModal();
+      
+      // Habilitar botón PDF cuando se recibe el reporte
+      const selectedProject = byId('selGitleaksProject')?.value || '';
+      if (selectedProject) {
+        setPdfButtonReadyProject(selectedProject);
+      }
     }
   });
 
@@ -798,6 +684,11 @@ function connectSocket() {
     markRunButtonAvailable();
     pendingRunPayload = null;
     socket = null;
+    
+    // Solo resetear PDF si no hay datos válidos
+    if (!latestFindingsReport || latestFindingsReport.length === 0) {
+      setPdfButtonReadyProject('');
+    }
   });
 
   socket.addEventListener('error', function () {
@@ -828,9 +719,9 @@ async function runGitleaks() {
     return;
   }
 
-  setRunButtonState(false);
-  setReportButtonState(true);
+  setRunButtonState(true);
   setDownloadPdfButtonState(true);
+  setPdfButtonReadyProject('');
 
   writeLine('\r\nPreparando ejecución de Gitleaks...\r\n');
   connectSocket();

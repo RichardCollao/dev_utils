@@ -30,8 +30,8 @@
         <i class="bi bi-terminal"></i> Consola Gitleaks
     </div>
     <div class="col-md-8 text-end">
-        <button type="button" id="btnOpenGitleaksReport" class="btn btn-sm btn-outline-secondary" disabled>
-            <i class="bi bi-card-list me-1"></i>Reporte
+        <button type="button" id="btnDownloadGitleaksPdf" class="btn btn-sm btn-outline-secondary" disabled>
+            <i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF
         </button>
         <button type="button" id="btnRunGitleaks" class="btn btn-sm btn-outline-secondary" disabled>
             <i class="bi bi-terminal me-2"></i>Gitleaks
@@ -50,140 +50,9 @@
     </div>
 </div>
 
-<div class="modal fade" id="gitleaksReportModal" tabindex="-1" aria-labelledby="gitleaksReportModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="gitleaksReportModalLabel">
-                        <i class="bi bi-shield-exclamation me-2"></i>Reporte de hallazgos Gitleaks
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span class="text-muted" id="gitleaksReportInfoText">Solo se muestran hallazgos
-                            detectados.</span>
-                        <span class="badge text-bg-dark" id="gitleaksReportCount">0 hallazgos</span>
-                    </div>
-                    <div id="gitleaksReportBody"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" id="btnDownloadGitleaksPdf" disabled>
-                        <i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <style>
-        #gitleaksReportModal code {
-            color: #0b3d91;
-            background-color: #eef4ff;
-            border-radius: 0.25rem;
-            padding: 0.1rem 0.3rem;
-        }
 
-        #gitleaksReportModal .card-header code,
-        #gitleaksReportModal .card-body code {
-            color: #0b3d91;
-        }
 
-        #gitleaksReportModal .gitleaks-report-summary {
-            background: #f8fafc;
-            border: 1px solid #dbe7ff;
-            border-radius: 0.75rem;
-            padding: 1rem;
-        }
-
-        #gitleaksReportModal .gitleaks-report-summary-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-        }
-
-        #gitleaksReportModal .gitleaks-report-summary-row+.gitleaks-report-summary-row {
-            margin-top: 0.75rem;
-            padding-top: 0.75rem;
-            border-top: 1px solid #dbe7ff;
-        }
-
-        #gitleaksReportModal .gitleaks-report-summary-label {
-            font-weight: 600;
-            color: #1e293b;
-        }
-
-        #gitleaksReportModal .gitleaks-report-badge {
-            min-width: 3.5rem;
-            padding: 0.45rem 0.75rem;
-            border-radius: 999px;
-            font-size: 0.9rem;
-        }
-
-        #gitleaksReportModal .gitleaks-report-badge-findings {
-            background-color: #0b3d91;
-            color: #ffffff;
-        }
-
-        #gitleaksReportModal .gitleaks-report-badge-files {
-            background-color: #dbeafe;
-            color: #0b3d91;
-        }
-
-        #gitleaksReportModal .gitleaks-report-badge-neutral {
-            background-color: #e2e8f0;
-            color: #334155;
-        }
-
-        /* Mejoras de estilo adicionales para consistencia con Sonar */
-        #gitleaksReportModal .card {
-            border-left: 3px solid #6366f1;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-        }
-
-        #gitleaksReportModal .card-header {
-            background-color: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-            font-weight: 500;
-        }
-
-        #gitleaksReportModal .badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-        }
-
-        #gitleaksReportModal .alert-success {
-            background-color: #dcfce7;
-            border-color: #bbf7d0;
-            color: #166534;
-            border-left: 4px solid #16a34a;
-        }
-
-        #gitleaksReportModal .gitleaks-finding-item {
-            background-color: #f9fafb;
-            padding: 0.75rem;
-            border-radius: 0.375rem;
-            margin-bottom: 0.75rem;
-            border-left: 3px solid #f59e0b;
-        }
-
-        #gitleaksReportModal .modal-title {
-            color: #374151;
-            font-weight: 600;
-        }
-
-        #gitleaksReportModal .modal-header {
-            background-color: #f8fafc;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        #gitleaksReportModal .gitleaks-finding-item hr {
-            margin: 0.75rem 0;
-        }
-    </style>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -199,9 +68,16 @@
         function updateRunGitleaksButtonState() {
             const projectSelect = document.querySelector('#selGitleaksProject');
             const button = document.querySelector('#btnRunGitleaks');
+            const pdfButton = document.querySelector('#btnDownloadGitleaksPdf');
             if (!button) return;
 
-            button.disabled = !(projectSelect && projectSelect.value);
+            const hasProject = !!(projectSelect && projectSelect.value);
+            button.disabled = !hasProject;
+
+            // Resetear estado del botón PDF cuando cambie la selección
+            if (pdfButton) {
+                pdfButton.disabled = true;
+            }
         }
 
         function loadGitleaksProjects() {
