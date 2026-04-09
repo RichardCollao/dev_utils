@@ -6,15 +6,10 @@
     <hr>
 
     <div class="col-md-7">
-        <label for="txtGitleaksDirectory" class="form-label">DIRECTORIO</label>
-        <div class="input-group input-group-sm">
-            <input type="text" id="txtGitleaksDirectory" class="form-control" placeholder="Seleccionar directorio"
-                readonly>
-            <button type="button" class="btn btn-outline-secondary"
-                onclick="openGlobalFileExplorerModal('txtGitleaksDirectory')">
-                <i class="bi bi-folder2-open me-1"></i>Explorar
-            </button>
-        </div>
+        <label for="selGitleaksProject" class="form-label">PROYECTO</label>
+        <select id="selGitleaksProject" class="form-select form-select-sm" aria-label="Seleccionar proyecto" disabled>
+            <option value="" selected disabled>Seleccionar proyecto</option>
+        </select>
     </div>
 
     <div class="col-md-3">
@@ -59,9 +54,7 @@
     </div>
 </div>
 
-<%- include('../sonar/fileExplorerModal') %>
-
-    <div class="modal fade" id="gitleaksReportModal" tabindex="-1" aria-labelledby="gitleaksReportModalLabel"
+<div class="modal fade" id="gitleaksReportModal" tabindex="-1" aria-labelledby="gitleaksReportModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
             <div class="modal-content">
@@ -90,10 +83,6 @@
     </div>
 
     <style>
-        input[readonly] {
-            user-select: none;
-        }
-
         #gitleaksReportModal code {
             color: #0b3d91;
             background-color: #eef4ff;
@@ -160,27 +149,37 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const directoryInput = document.querySelector('#txtGitleaksDirectory');
-            if (directoryInput) {
-                directoryInput.addEventListener('input', updateRunGitleaksButtonState);
-                directoryInput.addEventListener('change', updateRunGitleaksButtonState);
-            }
-
-            const modalAcceptButton = document.querySelector('#btnAcceptFileExplorer');
-            if (modalAcceptButton) {
-                modalAcceptButton.addEventListener('click', function () {
-                    setTimeout(updateRunGitleaksButtonState, 0);
-                });
+            const projectSelect = document.querySelector('#selGitleaksProject');
+            if (projectSelect) {
+                projectSelect.addEventListener('change', updateRunGitleaksButtonState);
             }
 
             updateRunGitleaksButtonState();
+            loadGitleaksProjects();
         });
 
         function updateRunGitleaksButtonState() {
-            const directoryInput = document.querySelector('#txtGitleaksDirectory');
+            const projectSelect = document.querySelector('#selGitleaksProject');
             const button = document.querySelector('#btnRunGitleaks');
             if (!button) return;
 
-            button.disabled = !(directoryInput && String(directoryInput.value || '').trim());
+            button.disabled = !(projectSelect && projectSelect.value);
+        }
+
+        function loadGitleaksProjects() {
+            request('/api/projects', 'GET', null, function(response) {
+                const projects = Array.isArray(response?.data) ? response.data : [];
+                const select = document.querySelector('#selGitleaksProject');
+                if (!select) return;
+
+                const options = ['<option value="" selected disabled>Seleccionar proyecto</option>']
+                    .concat(projects.map(function(obj) {
+                        return `<option value="${obj.projectBaseDir || ''}">${obj.projectName || ''}</option>`;
+                    }));
+
+                select.innerHTML = options.join('\n');
+                select.disabled = projects.length === 0;
+                updateRunGitleaksButtonState();
+            });
         }
     </script>

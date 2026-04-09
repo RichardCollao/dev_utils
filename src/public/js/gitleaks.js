@@ -272,8 +272,8 @@ function openReportModal() {
 }
 
 function getSafePdfName() {
-  const input = byId('txtGitleaksDirectory');
-  const raw = String(input?.value || 'gitleaks').trim();
+  const select = byId('selGitleaksProject');
+  const raw = String(select?.value || 'gitleaks').trim();
   const lastPart = raw.split('/').findLast(function(part) {
     return !!part;
   }) || 'gitleaks';
@@ -455,11 +455,11 @@ function ensureTerminal() {
 }
 
 function getPayload() {
-  const directoryInput = byId('txtGitleaksDirectory');
+  const projectSelect = byId('selGitleaksProject');
   const excludeGitIgnoredCheckbox = byId('chkExcludeGitIgnored');
 
   return {
-    directory: directoryInput?.value || '',
+    directory: projectSelect?.value || '',
     excludeGitIgnored: excludeGitIgnoredCheckbox ? !!excludeGitIgnoredCheckbox.checked : true
   };
 }
@@ -487,8 +487,8 @@ function clearConsole() {
 }
 
 function markRunButtonAvailable() {
-  const directoryInput = byId('txtGitleaksDirectory');
-  const hasDirectory = !!String(directoryInput?.value || '').trim();
+  const projectSelect = byId('selGitleaksProject');
+  const hasDirectory = !!String(projectSelect?.value || '').trim();
   setRunButtonState(!hasDirectory);
 }
 
