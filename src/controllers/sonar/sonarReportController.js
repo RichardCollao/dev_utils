@@ -582,7 +582,7 @@ function buildPdfBuffer(payload) {
       const textMaxWidth = pageWidth - (textX * 2);
 
       const chips = [
-        { text: `${index + 1}. ${severityStyle.label}`, style: severityStyle },
+        { text: severityStyle.label, style: severityStyle },
         { text: typeStyle.label, style: typeStyle }
       ].map(function(chip) {
         const label = String(chip.text || '').trim();
@@ -658,6 +658,13 @@ function buildPdfBuffer(payload) {
       chips.forEach(function(chip) {
         drawIssueChip(chip.text, chip.style);
       });
+
+      // Agregar numeración por separado (sin fondo de color)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(75, 85, 99);
+      doc.text(`${index + 1}.`, chipStartX - 12, chipY + 4.6);
+      doc.setTextColor(0, 0, 0);
 
       y = chipY + chipHeight + paragraphTopGap;
 
