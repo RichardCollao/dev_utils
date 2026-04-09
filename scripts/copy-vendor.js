@@ -60,15 +60,12 @@ async function run() {
   for (const asset of assetsToCopy) {
     await copyDirectory(asset.from, asset.to);
   }
-
-  console.log('Librerías copiadas a src/public/vendor correctamente.');
 }
 
 (async function main() {
   try {
     await run();
   } catch (error) {
-    console.error('Error copiando librerías a public/vendor:', error.message);
     process.exitCode = 1;
   }
 })();
