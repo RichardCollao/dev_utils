@@ -4,11 +4,13 @@ const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
-const { getSemgrepWorkingDirectory } = require('../../utils/envConfig');
+const { getSemgrepWorkingDirectory, getWorkspaceBaseDir } = require('../../utils/envConfig');
 const { getBundle, resolveWorkspacePath } = require('../../utils/configStore');
 const { readDefaultRules } = require('./semgrepConfigController');
 
 let semgrepWss = null;
+const WORKSPACE_BASE_DIR = path.resolve(getWorkspaceBaseDir());
+const SEMGREP_WORKSPACE_BASE_DIR = '/workspace';
 
 function sendSocketMessage(ws, payload) {
   if (ws?.readyState !== 1) return;
@@ -55,11 +57,27 @@ function buildDisplayCommand(args = []) {
     return quoteForShell(arg);
   });
 
-  return `semgrep ${safeArgs.join(' ')}`.trim();
+  return `docker ${safeArgs.join(' ')}`.trim();
 }
 
 function buildRawCommand(args = []) {
   return buildDisplayCommand(args);
+}
+
+function toPosixPath(value) {
+  return String(value || '').split(path.sep).join('/');
+}
+
+function toContainerWorkspacePath(hostAbsolutePath) {
+  const resolvedHostPath = path.resolve(hostAbsolutePath);
+  const relative = path.relative(WORKSPACE_BASE_DIR, resolvedHostPath);
+  const normalizedRelative = toPosixPath(relative || '').replace(/^\/+/, '');
+
+  if (!normalizedRelative) {
+    return SEMGREP_WORKSPACE_BASE_DIR;
+  }
+
+  return `${SEMGREP_WORKSPACE_BASE_DIR}/${normalizedRelative}`;
 }
 
 async function ensureDirectoryExists(targetPath, label) {
@@ -116,7 +134,18 @@ async function buildRulesFile(workingDirectory, globalConfig) {
 }
 
 function buildSemgrepArgs(config) {
-  const args = ['scan', '--config', config.rulesFilePath, '--metrics=off'];
+  const args = [
+    'exec',
+    '-i',
+    '-w',
+    config.projectBaseDirContainer,
+    'semgrep',
+    'semgrep',
+    'scan',
+    '--config',
+    config.rulesFilePathContainer,
+    '--metrics=off'
+  ];
 
   config.exclusions.forEach(function(exclusion) {
     args.push('--exclude', exclusion);
@@ -152,7 +181,15 @@ async function buildScannerConfig(payload) {
   const sources = normalizeList(payload.txtSources);
   const exclusions = normalizeList(payload.txtExclusions);
   const rulesFilePath = await buildRulesFile(semgrepWorkingDirectory, globalConfig);
-  const args = buildSemgrepArgs({ rulesFilePath, sources, exclusions });
+  const rulesFilePathContainer = toContainerWorkspacePath(rulesFilePath);
+  const projectBaseDirContainer = toContainerWorkspacePath(projectBaseDir);
+  const args = buildSemgrepArgs({
+    rulesFilePath,
+    rulesFilePathContainer,
+    projectBaseDirContainer,
+    sources,
+    exclusions
+  });
 
   return {
     projectKey,
@@ -280,7 +317,6 @@ function initSemgrepWebSocket(server) {
         (async function() {
           try {
             const config = await buildScannerConfig(message.payload || {});
-            scannerProcess.write(`cd ${quoteForShell(config.projectBaseDir)}\r`);
             writeScanCommand(config);
           } catch (error) {
             sendSocketMessage(ws, {
