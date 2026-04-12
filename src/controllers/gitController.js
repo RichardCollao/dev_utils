@@ -169,7 +169,7 @@ async function getProjectDiffFiles(req, res) {
     }
 
     try {
-      const { stdout } = await execFileAsync('git', ['diff', '--name-only', `${base}..${compare}`], { cwd: baseDir });
+      const { stdout } = await execFileAsync('git', ['diff', '--name-only', `${base}...${compare}`], { cwd: baseDir });
       const files = stdout
         .split('\n')
         .map(line => line.trim())
