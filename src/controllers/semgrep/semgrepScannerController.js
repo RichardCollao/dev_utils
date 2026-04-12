@@ -144,7 +144,8 @@ function buildSemgrepArgs(config) {
     'scan',
     '--config',
     config.rulesFilePathContainer,
-    '--metrics=off'
+    '--metrics=off',
+    '--json'
   ];
 
   config.exclusions.forEach(function(exclusion) {

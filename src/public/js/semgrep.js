@@ -1,6 +1,9 @@
 document.addEventListener('DOMContentLoaded', function () {
   scannerButton = byId('btnSemgrepScanner');
   clearConsoleButton = byId('btnClearSemgrepConsole');
+  downloadPdfButton = byId('btnDownloadSemgrepPdf');
+
+  globalThis.updateSemgrepPdfButtonState = updateSemgrepPdfButtonState;
 
   ensureTerminal();
 
@@ -10,6 +13,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (clearConsoleButton) {
     clearConsoleButton.addEventListener('click', clearConsole);
+  }
+
+  if (downloadPdfButton) {
+    downloadPdfButton.addEventListener('click', downloadReportPdf);
   }
 
   globalThis.addEventListener('resize', function () {
@@ -28,9 +35,14 @@ let fitAddon = null;
 let socket = null;
 let scannerButton = null;
 let clearConsoleButton = null;
+let downloadPdfButton = null;
 let terminalInputDisposable = null;
 let pendingRunPayload = null;
 let resizeTimeoutId = null;
+let semgrepPdfReadyProject = '';
+let activeScanProjectName = '';
+let runOutputBuffer = '';
+let latestSemgrepReport = null;
 
 function byId(id) {
   return document.getElementById(id);
@@ -40,6 +52,30 @@ function setScannerButtonState(disabled) {
   if (scannerButton) {
     scannerButton.disabled = !!disabled;
   }
+}
+
+function setDownloadPdfButtonState(disabled) {
+  if (downloadPdfButton) {
+    downloadPdfButton.disabled = !!disabled;
+  }
+}
+
+function updateSemgrepPdfButtonState() {
+  const selectedProject = String(byId('selSemgrepProject')?.value || '').trim();
+  const hasReport = Array.isArray(latestSemgrepReport?.results) && latestSemgrepReport.results.length >= 0;
+  const pdfEnabled = !!selectedProject && selectedProject === semgrepPdfReadyProject && hasReport;
+  setDownloadPdfButtonState(!pdfEnabled);
+}
+
+function setPdfButtonReadyProject(projectName) {
+  semgrepPdfReadyProject = String(projectName || '').trim();
+  updateSemgrepPdfButtonState();
+}
+
+function resetReportState() {
+  latestSemgrepReport = null;
+  runOutputBuffer = '';
+  setPdfButtonReadyProject('');
 }
 
 function fitTerminal(shouldNotifyResize = true) {
@@ -139,6 +175,255 @@ function sendRunScanner(payload) {
   }));
 }
 
+function extractJsonObject(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+  }
+
+  const first = raw.indexOf('{');
+  const last = raw.lastIndexOf('}');
+  if (first < 0 || last < 0 || last <= first) return null;
+
+  const candidate = raw.slice(first, last + 1);
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function captureSemgrepReportFromOutput() {
+  const report = extractJsonObject(runOutputBuffer);
+  if (!report || typeof report !== 'object') {
+    latestSemgrepReport = { results: [] };
+    return;
+  }
+
+  latestSemgrepReport = {
+    ...report,
+    results: Array.isArray(report.results) ? report.results : []
+  };
+}
+
+function getSafePdfName() {
+  const selectedProject = String(byId('selSemgrepProject')?.value || 'semgrep').trim() || 'semgrep';
+  const safe = selectedProject.replaceAll(/[^a-zA-Z0-9._-]+/g, '_');
+  const stamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
+  return `semgrep-report-${safe}-${stamp}.pdf`;
+}
+
+function addPdfLine(doc, text, x, y, pageWidth, lineHeight) {
+  const maxWidth = pageWidth - (x * 2);
+  const lines = doc.splitTextToSize(String(text || ''), maxWidth);
+  let nextY = y;
+
+  lines.forEach(function(line) {
+    if (nextY > 280) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    doc.text(line, x, nextY);
+    nextY += lineHeight;
+  });
+
+  return nextY;
+}
+
+function drawSectionChip(doc, text, x, y, width, height, style) {
+  const fillColor = Array.isArray(style?.fillColor) ? style.fillColor : [241, 245, 249];
+  const textColor = Array.isArray(style?.textColor) ? style.textColor : [51, 65, 85];
+
+  doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+  doc.roundedRect(x, y, width, height, 1.5, 1.5, 'F');
+  doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+  doc.text(String(text || ''), x + 2.5, y + 4.6);
+  doc.setTextColor(0, 0, 0);
+}
+
+function getSeverityStyle(severity) {
+  const normalized = String(severity || 'INFO').toUpperCase();
+  if (normalized === 'ERROR') {
+    return { label: 'ERROR', fillColor: [254, 226, 226], textColor: [127, 29, 29] };
+  }
+  if (normalized === 'WARNING') {
+    return { label: 'WARNING', fillColor: [255, 237, 213], textColor: [124, 45, 18] };
+  }
+  return { label: normalized || 'INFO', fillColor: [219, 234, 254], textColor: [30, 64, 175] };
+}
+
+function getResultHeaderStyle(totalFindings) {
+  if (totalFindings === 0) {
+    return {
+      title: 'ANÁLISIS LIMPIO',
+      subtitle: 'No se detectaron hallazgos de Semgrep.',
+      fillColor: [220, 252, 231],
+      textColor: [22, 101, 52]
+    };
+  }
+
+  if (totalFindings <= 10) {
+    return {
+      title: 'ANÁLISIS CON HALLAZGOS',
+      subtitle: 'Se detectaron hallazgos que requieren revisión.',
+      fillColor: [254, 249, 195],
+      textColor: [113, 63, 18]
+    };
+  }
+
+  return {
+    title: 'ANÁLISIS CON HALLAZGOS IMPORTANTES',
+    subtitle: 'Se detectó un volumen alto de hallazgos.',
+    fillColor: [254, 226, 226],
+    textColor: [127, 29, 29]
+  };
+}
+
+function downloadReportPdf() {
+  const report = latestSemgrepReport && typeof latestSemgrepReport === 'object'
+    ? latestSemgrepReport
+    : { results: [] };
+  const results = Array.isArray(report.results) ? report.results : [];
+
+  const jsPdfLib = globalThis.jspdf;
+  if (!jsPdfLib || typeof jsPdfLib.jsPDF !== 'function') {
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({ icon: 'error', title: 'PDF no disponible', text: 'No se pudo cargar la librería de PDF.' });
+    }
+    return;
+  }
+
+  const doc = new jsPdfLib.jsPDF({
+    orientation: 'p',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 18;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(51, 65, 85);
+  y = addPdfLine(doc, 'Reporte de Seguridad - Semgrep', 14, y, pageWidth, 8);
+  y += 3;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(75, 85, 99);
+  y = addPdfLine(doc, `Generado: ${new Date().toLocaleString('es-CL', { hour12: false })}`, 14, y, pageWidth, 5);
+  y += 5;
+
+  const headerStyle = getResultHeaderStyle(results.length);
+  doc.setFillColor(headerStyle.fillColor[0], headerStyle.fillColor[1], headerStyle.fillColor[2]);
+  doc.roundedRect(14, y - 4, pageWidth - 28, 16, 2, 2, 'F');
+  doc.setTextColor(headerStyle.textColor[0], headerStyle.textColor[1], headerStyle.textColor[2]);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text(headerStyle.title, 17, y + 2.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(headerStyle.subtitle, 17, y + 8.5);
+  doc.setTextColor(0, 0, 0);
+  y += 20;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(51, 65, 85);
+  y = addPdfLine(doc, 'Resumen', 14, y, pageWidth, 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(75, 85, 99);
+  y = addPdfLine(doc, `Total de hallazgos: ${results.length}`, 14, y, pageWidth, 5);
+  y += 8;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(51, 65, 85);
+  y = addPdfLine(doc, 'Hallazgos', 14, y, pageWidth, 6);
+
+  if (results.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(75, 85, 99);
+    y = addPdfLine(doc, 'No se encontraron hallazgos en el escaneo.', 14, y, pageWidth, 5);
+    doc.save(getSafePdfName());
+    return;
+  }
+
+  results.forEach(function(item, index) {
+    const checkId = String(item?.check_id || 'N/A');
+    const filePath = String(item?.path || 'N/A');
+    const line = item?.start?.line ? String(item.start.line) : 'N/A';
+    const message = String(item?.extra?.message || 'Sin descripción');
+    const severity = String(item?.extra?.severity || 'INFO');
+    const severityStyle = getSeverityStyle(severity);
+
+    const cardX = 14;
+    const cardWidth = pageWidth - 28;
+    const chipHeight = 6;
+    const lineHeight = 5;
+    const textX = 18;
+    const textMaxWidth = pageWidth - (textX * 2);
+
+    const messageLines = doc.splitTextToSize(`Descripción: ${message}`, textMaxWidth);
+    const fileLines = doc.splitTextToSize(`Archivo: ${filePath}`, textMaxWidth);
+    const lineLines = doc.splitTextToSize(`Línea: ${line}`, textMaxWidth);
+    const cardHeight = 16 + (messageLines.length + fileLines.length + lineLines.length) * lineHeight;
+
+    if (y + cardHeight > 280) {
+      doc.addPage();
+      y = 20;
+    }
+
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(cardX, y, cardWidth, cardHeight, 2, 2, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(cardX, y, cardWidth, cardHeight, 2, 2, 'S');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(75, 85, 99);
+    doc.text(`${index + 1}.`, cardX + 2, y + 8.5);
+    doc.setTextColor(0, 0, 0);
+
+    drawSectionChip(doc, severityStyle.label, cardX + 10, y + 3, 24, chipHeight, severityStyle);
+    drawSectionChip(doc, checkId, cardX + 36, y + 3, Math.max(24, doc.getTextWidth(checkId) + 6), chipHeight, {
+      fillColor: [241, 245, 249],
+      textColor: [51, 65, 85]
+    });
+
+    let textY = y + 13;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+
+    messageLines.forEach(function(lineText) {
+      doc.text(lineText, textX, textY);
+      textY += lineHeight;
+    });
+
+    fileLines.forEach(function(lineText) {
+      doc.text(lineText, textX, textY);
+      textY += lineHeight;
+    });
+
+    lineLines.forEach(function(lineText) {
+      doc.text(lineText, textX, textY);
+      textY += lineHeight;
+    });
+
+    y += cardHeight + 4;
+  });
+
+  doc.save(getSafePdfName());
+}
+
 function connectSocket() {
   if (socket?.readyState === 0 || socket?.readyState === 1) return;
 
@@ -167,6 +452,7 @@ function connectSocket() {
     }
 
     if (message.type === 'output') {
+      runOutputBuffer += String(message.data || '');
       writeLine(message.data || '');
       return;
     }
@@ -179,11 +465,15 @@ function connectSocket() {
     if (message.type === 'error') {
       writeLine(`\r\n[ERROR] ${message.message || 'Error desconocido'}\r\n`);
       setScannerButtonState(false);
+      setPdfButtonReadyProject('');
       return;
     }
 
     if (message.type === 'exit') {
       writeLine(`\r\n[Proceso finalizado] código=${message.exitCode}\r\n`);
+      captureSemgrepReportFromOutput();
+      setPdfButtonReadyProject(activeScanProjectName);
+      activeScanProjectName = '';
       setScannerButtonState(false);
     }
   });
@@ -226,6 +516,8 @@ function runScanner() {
   }
 
   setScannerButtonState(true);
+  activeScanProjectName = String(payload.projectName || '').trim();
+  resetReportState();
   writeLine('\r\nPreparando ejecución de SemgrepScanner...\r\n');
 
   connectSocket();
