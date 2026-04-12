@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="es">
+<%- include('../partials/head', { pageTitle: 'Configuración Semgrep | DevUtils' }) %>
+
+<body>
+  <%- include('../partials/loading') %>
+  <%- include('../partials/navbar', { activePage: 'semgrep_config' }) %>
+  <main class="container py-4">
+    <%- include('configuracion') %>
+  </main>
+  <%- include('../partials/foot') %>
+</body>
+
+</html>

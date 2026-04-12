@@ -97,13 +97,18 @@ async function saveGlobalConfig(req, res) {
       });
     }
 
+    const current = await getBundle();
+    const currentGlobal = current?.bundle?.global && typeof current.bundle.global === 'object'
+      ? current.bundle.global
+      : {};
+
     const data = {
       sonarToken: String(payload.sonarToken).trim(),
+      semgrepRules: typeof currentGlobal.semgrepRules === 'string' ? currentGlobal.semgrepRules : '',
       sonarWorkingDirectory,
       sonarConfigPath
     };
 
-    const current = await getBundle();
     const nextBundle = {
       global: data,
       projects: Array.isArray(current?.bundle?.projects) ? current.bundle.projects : []

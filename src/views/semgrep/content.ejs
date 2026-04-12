@@ -1,0 +1,161 @@
+<!-- Semgrep -->
+<div class="row mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h3 class="mb-0"><i class="bi bi-search"></i> Semgrep</h3>
+    <a href="/semgrep_config" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-gear me-1"></i>Configuración
+    </a>
+  </div>
+  <hr>
+  <div class="col-md-4">
+    <select id="selSemgrepProject" class="form-select form-select-sm" aria-label="Seleccionar proyecto">
+      <option value="" selected disabled>Seleccionar proyecto</option>
+    </select>
+  </div>
+  <div class="col-md-8">
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openSemgrepDiffModal()">
+      <i class="bi bi-card-list me-2"></i>diff
+    </button>
+  </div>
+</div>
+<hr>
+
+<div class="row mt-3">
+  <div class="col-md-6">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <label for="txtSemgrepSources" class="form-label mb-0">SOURCES</label>
+    </div>
+    <textarea class="form-control" id="txtSemgrepSources" rows="8"></textarea>
+  </div>
+
+  <div class="col-md-6">
+    <label for="txtSemgrepExclusions" class="form-label">EXCLUSIONS</label>
+    <textarea class="form-control" id="txtSemgrepExclusions" rows="8"></textarea>
+  </div>
+</div>
+<hr>
+
+<div class="row mt-3">
+  <div class="col-md-4">
+    <i class="bi bi-terminal"></i> Consola Semgrep
+  </div>
+  <div class="col-md-8 text-end">
+    <button type="button" id="btnSemgrepScanner" class="btn btn-sm btn-outline-secondary" disabled>
+      <i class="bi bi-terminal me-2"></i>SemgrepScanner
+    </button>
+    <button type="button" id="btnClearSemgrepConsole" class="btn btn-sm btn-outline-secondary ms-2">
+      <i class="bi bi-eraser me-1"></i>Limpiar
+    </button>
+  </div>
+</div>
+
+<div class="row mt-3">
+  <div class="col-md-12">
+    <div id="semgrepTerminal" class="scanner-terminal">
+      <div id="semgrepTerminalInner" class="scanner-terminal-inner"></div>
+    </div>
+  </div>
+</div>
+
+<%- include('diffBranchesModal') %>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const select = document.querySelector('#selSemgrepProject');
+    if (select) {
+      select.addEventListener('change', updateSemgrepButtonState);
+    }
+
+    loadSemgrepProjects();
+    updateSemgrepButtonState();
+  });
+
+  function updateSemgrepButtonState() {
+    const select = document.querySelector('#selSemgrepProject');
+    const scannerButton = document.querySelector('#btnSemgrepScanner');
+    const selectedProject = (select?.value || '').trim();
+
+    if (scannerButton) {
+      scannerButton.disabled = !selectedProject;
+    }
+  }
+
+  function loadSemgrepProjects() {
+    request('/api/projects', 'GET', null, function(response) {
+      const projects = Array.isArray(response?.data) ? response.data : [];
+      const select = document.querySelector('#selSemgrepProject');
+      if (!select) return;
+
+      const options = ['<option value="" selected disabled>Seleccionar proyecto</option>']
+        .concat(projects.map(function(obj) {
+          const projectName = String(obj?.projectName || '').trim();
+          return `<option value="${projectName}">${projectName}</option>`;
+        }));
+
+      select.innerHTML = options.join('\n');
+      select.disabled = projects.length === 0;
+      updateSemgrepButtonState();
+    });
+  }
+
+  function openSemgrepDiffModal() {
+    const projectKey = (document.querySelector('#selSemgrepProject')?.value || '').trim();
+    if (!projectKey) {
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona un nombre de proyecto antes de comparar ramas.' });
+      return;
+    }
+
+    request('/api/projects/' + encodeURIComponent(projectKey) + '/branches', 'GET', null, function (response) {
+      if (!response.success || !Array.isArray(response.data)) {
+        Swal.fire({ icon: 'error', title: 'Error', text: response.message || 'No fue posible obtener las ramas.' });
+        return;
+      }
+
+      const options = response.data.map(function (b) {
+        return '<option value="' + b + '">' + b + '</option>';
+      }).join('\n');
+
+      const selBase = document.getElementById('selSemgrepBase');
+      const selCompare = document.getElementById('selSemgrepCompare');
+      selBase.innerHTML = options;
+      selCompare.innerHTML = options;
+
+      if (response.baseBranch && response.data.includes(response.baseBranch)) {
+        selBase.value = response.baseBranch;
+      }
+      if (response.currentBranch && response.data.includes(response.currentBranch)) {
+        selCompare.value = response.currentBranch;
+      }
+
+      const modal = new bootstrap.Modal(document.getElementById('modalSemgrepDiff'));
+      modal.show();
+    });
+  }
+
+  function confirmSemgrepDiff() {
+    const projectKey = (document.querySelector('#selSemgrepProject')?.value || '').trim();
+    const base = document.getElementById('selSemgrepBase').value;
+    const compare = document.getElementById('selSemgrepCompare').value;
+
+    if (!projectKey || !base || !compare) {
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona proyecto y ramas para comparar.' });
+      return;
+    }
+
+    const query = '?base=' + encodeURIComponent(base) + '&compare=' + encodeURIComponent(compare);
+    request('/api/projects/' + encodeURIComponent(projectKey) + '/diff-files' + query, 'GET', null, function (response) {
+      if (!response.success || !Array.isArray(response.data)) {
+        Swal.fire({ icon: 'error', title: 'Error', text: response.message || 'No fue posible obtener diferencias.' });
+        return;
+      }
+
+      const txtSources = document.getElementById('txtSemgrepSources');
+      txtSources.value = response.data.join('\n');
+
+      const modal = bootstrap.Modal.getInstance(document.getElementById('modalSemgrepDiff'));
+      if (modal) modal.hide();
+
+      txtSources.focus();
+    });
+  }
+</script>

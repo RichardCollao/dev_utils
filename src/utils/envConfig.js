@@ -10,6 +10,10 @@ function getSonarConfigPath() {
   return String(process.env.sonarConfigPath || 'sonar').trim();
 }
 
+function getSemgrepWorkingDirectory() {
+  return String(process.env.semgrepWorkingDirectory || 'semgrep/temp').trim();
+}
+
 function getAppConfigDirectory() {
   return 'devutils';
 }
@@ -26,6 +30,7 @@ module.exports = {
   getSonarHostUrl,
   getSonarWorkingDirectory,
   getSonarConfigPath,
+  getSemgrepWorkingDirectory,
   getAppConfigDirectory,
   getWorkspaceBaseDir
 };

@@ -1,0 +1,20 @@
+rules:
+  - id: javascript-no-eval
+    message: Evita el uso de eval() por riesgo de ejecución de código.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern: eval(...)
+
+  - id: python-subprocess-shell-true
+    message: Evita subprocess con shell=True cuando no sea estrictamente necesario.
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: hardcoded-password-assignment
+    message: Posible secreto hardcodeado en variable de contraseña.
+    severity: WARNING
+    languages: [javascript, typescript, python, go, java]
+    patterns:
+      - pattern-regex: (?i)(password|passwd|pwd|secret)\s*[:=]\s*["'][^"']+["']

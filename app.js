@@ -5,6 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const homeRoutes = require('./src/routes/routes');
 const sonarScannerController = require('./src/controllers/sonar/sonarScannerController');
+const semgrepScannerController = require('./src/controllers/semgrep/semgrepScannerController');
 const gitleaksScannerController = require('./src/controllers/gitleaks/gitleaksScannerController');
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +26,7 @@ app.use('/', homeRoutes);
 
 const server = http.createServer(app);
 const scannerWss = sonarScannerController.initScannerWebSocket(server);
+const semgrepWss = semgrepScannerController.initSemgrepWebSocket(server);
 const gitleaksWss = gitleaksScannerController.initGitleaksWebSocket(server);
 
 server.on('upgrade', function(request, socket, head) {
@@ -34,6 +36,13 @@ server.on('upgrade', function(request, socket, head) {
 	if (requestUrl.pathname === '/ws/scanner') {
 		scannerWss.handleUpgrade(request, socket, head, function(ws) {
 			scannerWss.emit('connection', ws, request);
+		});
+		return;
+	}
+
+	if (requestUrl.pathname === '/ws/semgrep') {
+		semgrepWss.handleUpgrade(request, socket, head, function(ws) {
+			semgrepWss.emit('connection', ws, request);
 		});
 		return;
 	}

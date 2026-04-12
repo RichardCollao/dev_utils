@@ -1,0 +1,79 @@
+<div class="row mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h3 class="mb-0"><i class="bi bi-gear"></i> Configuración Semgrep</h3>
+  </div>
+  <hr>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-list-check"></i>
+        <span class="fw-semibold">Reglas</span>
+      </div>
+      <div class="card-body">
+        <form id="frmSemgrepGlobalConfig" class="row g-3">
+          <div class="col-12">
+            <label for="globalSemgrepRules" class="form-label">Reglas Semgrep (YAML)</label>
+            <textarea class="form-control" id="globalSemgrepRules" rows="15" spellcheck="false"></textarea>
+          </div>
+          <div class="col-12 d-flex gap-2 justify-content-end">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="restoreSemgrepDefaultRules()">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar reglas por defecto
+            </button>
+            <button type="button" id="btnSaveSemgrepGlobalConfig" class="btn btn-sm btn-outline-secondary" onclick="saveSemgrepGlobalConfig()">
+              <i class="bi bi-floppy me-1"></i>Guardar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let semgrepDefaultRules = '';
+
+  document.addEventListener('DOMContentLoaded', function () {
+    loadSemgrepDefaultRules();
+    loadSemgrepGlobalConfig();
+  });
+
+  function loadSemgrepDefaultRules() {
+    request('/api/semgrep/default-rules', 'GET', null, function (response) {
+      semgrepDefaultRules = String(response?.data?.rules || '').trim();
+    });
+  }
+
+  function loadSemgrepGlobalConfig() {
+    request('/api/semgrep/global', 'GET', null, function (response) {
+      const data = response?.data || {};
+      const rules = String(data.semgrepRules || '');
+      document.getElementById('globalSemgrepRules').value = rules;
+    });
+  }
+
+  function restoreSemgrepDefaultRules() {
+    if (!semgrepDefaultRules) {
+      Swal.fire({ icon: 'warning', title: 'Atención', text: 'No se pudieron cargar las reglas por defecto.' });
+      return;
+    }
+
+    document.getElementById('globalSemgrepRules').value = semgrepDefaultRules;
+  }
+
+  function saveSemgrepGlobalConfig() {
+    const payload = {
+      semgrepRules: document.getElementById('globalSemgrepRules').value || ''
+    };
+
+    request('/api/semgrep/global', 'POST', payload, function () {
+      Swal.fire({
+        icon: 'success',
+        title: 'Configuración guardada',
+        text: 'La configuración de Semgrep se guardó correctamente.',
+        timer: 3000,
+        timerProgressBar: true,
+        showConfirmButton: false
+      });
+    });
+  }
+</script>

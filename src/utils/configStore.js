@@ -72,6 +72,7 @@ function normalizeSonarBundle(raw) {
   return {
     global: {
       sonarToken: String(global.sonarToken || '').trim(),
+      semgrepRules: typeof global.semgrepRules === 'string' ? global.semgrepRules : '',
       sonarWorkingDirectory,
       sonarConfigPath
     },
@@ -92,6 +93,18 @@ function normalizeSonarBundle(raw) {
         return !!item.projectName;
       })
   };
+}
+
+async function readRawBundleFromLocation(location) {
+  try {
+    const raw = await fs.readFile(location.filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return {};
+    }
+    throw error;
+  }
 }
 
 function normalizeAppBundle(raw) {
@@ -136,11 +149,17 @@ async function writeBundle(bundleInput, directoryRelative) {
   const rawDir = String(directoryRelative || '').trim() || safeBundle.global.sonarConfigPath;
   const targetDirectory = normalizeDirectory(rawDir);
   const location = buildConfigFilePath(targetDirectory);
+  const currentRawBundle = await readRawBundleFromLocation(location);
 
   safeBundle.global.sonarConfigPath = targetDirectory;
 
+  const mergedBundle = {
+    ...(currentRawBundle && typeof currentRawBundle === 'object' ? currentRawBundle : {}),
+    ...safeBundle
+  };
+
   await fs.mkdir(location.absoluteDirectory, { recursive: true });
-  await fs.writeFile(location.filePath, JSON.stringify(safeBundle, null, 2), 'utf8');
+  await fs.writeFile(location.filePath, JSON.stringify(mergedBundle, null, 2), 'utf8');
 
   return { bundle: safeBundle, ...location };
 }
