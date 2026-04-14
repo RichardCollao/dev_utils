@@ -162,7 +162,15 @@ function buildSemgrepArgs(config) {
     args.push('--config', config.rulesFilePathContainer);
   }
 
-  args.push('--metrics=off', '--json');
+  const hasAutoConfig = configFlags.some(function(flag) {
+    return String(flag || '').trim().toLowerCase() === 'auto';
+  });
+
+  if (!hasAutoConfig) {
+    args.push('--metrics=off');
+  }
+
+  args.push('--json');
 
   config.exclusions.forEach(function(exclusion) {
     args.push('--exclude', exclusion);
