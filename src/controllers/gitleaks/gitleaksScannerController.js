@@ -460,6 +460,8 @@ async function enrichFindingsWithGitMetadata(findings, sessionConfig) {
 async function buildGitleaksConfig(payload) {
   const selectedDirectory = String(payload.directory || payload.sourceDirectory || '').trim();
   const excludeGitIgnored = payload.excludeGitIgnored !== false;
+  const rawMode = String(payload.mode || '').trim().toLowerCase();
+  let mode = rawMode === 'git' ? 'git' : 'dir';
 
   if (!selectedDirectory) {
     const error = new Error('Debe seleccionar un directorio antes de ejecutar Gitleaks.');
@@ -475,8 +477,16 @@ async function buildGitleaksConfig(payload) {
   let scanContainerDirectory = sourceContainerDirectory;
   let tempRootDirectory = '';
   let totalFilesAnalyzed = await countAccessibleFilesInDirectory(sourceDirectory);
+  let isGitRepo = false;
 
   try {
+    const repoRoot = await getRepoRootForPath(sourceDirectory, getBlameMetadata.repoCache);
+    isGitRepo = !!repoRoot;
+
+    if (mode === 'git' && !isGitRepo) {
+      mode = 'dir';
+    }
+
     if (excludeGitIgnored) {
       const gitIncludedFiles = await getGitIncludedFiles(sourceDirectory);
 
@@ -496,13 +506,21 @@ async function buildGitleaksConfig(payload) {
     throw error;
   }
 
-  const gitleaksShellScript = [
-    'if gitleaks dir --help | grep -q -- --no-git; then',
-    '  gitleaks dir --no-git "$1" --verbose;',
-    'else',
-    '  gitleaks dir "$1" --verbose;',
-    'fi'
-  ].join(' ');
+  const gitleaksShellScript = mode === 'git'
+    ? [
+      'if gitleaks dir --help | grep -q -- --no-git; then',
+      '  gitleaks dir "$1" --verbose;',
+      'else',
+      '  gitleaks dir "$1" --verbose;',
+      'fi'
+    ].join(' ')
+    : [
+      'if gitleaks dir --help | grep -q -- --no-git; then',
+      '  gitleaks dir --no-git "$1" --verbose;',
+      'else',
+      '  gitleaks dir "$1" --verbose;',
+      'fi'
+    ].join(' ');
 
   const args = [
     'exec',
@@ -523,6 +541,8 @@ async function buildGitleaksConfig(payload) {
     tempRootDirectory,
     totalFilesAnalyzed,
     excludeGitIgnored,
+    mode,
+    isGitRepo,
     gitIgnoreMessage: excludeGitIgnored
       ? 'Se excluyen los archivos definidos en .gitignore.'
       : 'No se excluyen los archivos definidos en .gitignore.',
@@ -588,6 +608,39 @@ async function createGitleaksSession(req, res) {
     return res.status(error?.status || 500).json({
       success: false,
       message: error?.message || 'No fue posible preparar la sesión de Gitleaks.'
+    });
+  }
+}
+
+async function getGitleaksProjectMetadata(req, res) {
+  try {
+    const selectedDirectory = String(req.query.directory || '').trim();
+
+    if (!selectedDirectory) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe seleccionar un directorio para obtener la metadata de Gitleaks.'
+      });
+    }
+
+    const sourceDirectory = resolveWorkspacePath(selectedDirectory);
+    assertInsideWorkspace(sourceDirectory);
+    await ensureDirectoryExists(sourceDirectory, 'Directorio seleccionado');
+
+    const repoRoot = await getRepoRootForPath(sourceDirectory, getBlameMetadata.repoCache);
+    const isGitRepo = !!repoRoot;
+
+    return res.json({
+      success: true,
+      data: {
+        isGitRepo,
+        repoRoot: repoRoot || ''
+      }
+    });
+  } catch (error) {
+    return res.status(error?.status || 500).json({
+      success: false,
+      message: error?.message || 'No fue posible obtener la metadata del proyecto para Gitleaks.'
     });
   }
 }
@@ -749,5 +802,6 @@ function initGitleaksWebSocket(server) {
 
 module.exports = {
   createGitleaksSession,
-  initGitleaksWebSocket
+  initGitleaksWebSocket,
+  getGitleaksProjectMetadata
 };

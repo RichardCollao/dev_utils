@@ -39,6 +39,7 @@ router.get('/api/projects/:projectName/diff-files', gitController.getProjectDiff
 router.post('/api/scanner/session', sonarScannerController.createScannerSession);
 router.post('/api/semgrep/session', semgrepScannerController.createSemgrepSession);
 router.post('/api/gitleaks/session', gitleaksScannerController.createGitleaksSession);
+router.get('/api/gitleaks/project-metadata', gitleaksScannerController.getGitleaksProjectMetadata);
 router.post('/explorer', fileExplorerController.renderExplorer);
 router.post('/explorer/files', fileExplorerController.listFiles);
 

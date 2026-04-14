@@ -5,7 +5,7 @@
     </div>
     <hr>
 
-    <div class="col-md-7">
+    <div class="col-md-4">
         <label for="selGitleaksProject" class="form-label">PROYECTO</label>
         <select id="selGitleaksProject" class="form-select form-select-sm" aria-label="Seleccionar proyecto" disabled>
             <option value="" selected disabled>Seleccionar proyecto</option>
@@ -20,6 +20,19 @@
                     Excluir archivos <b>.gitignore</b>
                 </label>
         </div>
+    </div>
+
+    <div class="col-md-5">
+        <fieldset class="mb-0">
+        <legend class="form-label fs-6 mb-1">Modo</legend>
+        <div class="btn-group btn-group-sm" aria-label="Modo Gitleaks">
+            <input class="btn-check" type="radio" name="gitleaksMode" id="gitleaksModeGit" value="git" autocomplete="off">
+            <label class="btn btn-outline-secondary" for="gitleaksModeGit">Git</label>
+
+            <input class="btn-check" type="radio" name="gitleaksMode" id="gitleaksModeDir" value="dir" autocomplete="off" checked>
+            <label class="btn btn-outline-secondary" for="gitleaksModeDir">Dir</label>
+        </div>
+        </fieldset>
     </div>
 </div>
 
@@ -59,9 +72,11 @@
             const projectSelect = document.querySelector('#selGitleaksProject');
             if (projectSelect) {
                 projectSelect.addEventListener('change', updateRunGitleaksButtonState);
+                projectSelect.addEventListener('change', updateGitleaksModeForSelection);
             }
 
             updateRunGitleaksButtonState();
+            updateGitleaksModeForSelection();
             loadGitleaksProjects();
         });
 
@@ -80,6 +95,44 @@
             }
         }
 
+        function updateGitleaksModeForSelection() {
+            const select = document.querySelector('#selGitleaksProject');
+            const gitRadio = document.querySelector('#gitleaksModeGit');
+            const gitLabel = document.querySelector('label[for="gitleaksModeGit"]');
+            const dirRadio = document.querySelector('#gitleaksModeDir');
+            const help = document.querySelector('#gitleaksModeHelp');
+
+            if (!gitRadio || !dirRadio) return;
+
+            const directory = String(select?.value || '').trim();
+
+            if (!directory) {
+                gitRadio.disabled = true;
+                if (gitLabel) gitLabel.classList.add('disabled');
+                dirRadio.checked = true;
+                if (help) help.textContent = 'Selecciona un proyecto para elegir el modo.';
+                return;
+            }
+
+            request(`/api/gitleaks/project-metadata?directory=${encodeURIComponent(directory)}`, 'GET', null, function (response) {
+                const isGitRepo = !!response?.data?.isGitRepo;
+
+                gitRadio.disabled = !isGitRepo;
+                if (gitLabel) gitLabel.classList.toggle('disabled', !isGitRepo);
+
+                if (isGitRepo) {
+                    gitRadio.checked = true;
+                } else {
+                    dirRadio.checked = true;
+                }
+            }, function () {
+                gitRadio.disabled = true;
+                if (gitLabel) gitLabel.classList.add('disabled');
+                dirRadio.checked = true;
+                if (help) help.textContent = 'No fue posible verificar el tipo de proyecto.';
+            });
+        }
+
         function loadGitleaksProjects() {
             request('/api/projects', 'GET', null, function(response) {
                 const projects = Array.isArray(response?.data) ? response.data : [];
@@ -94,6 +147,7 @@
                 select.innerHTML = options.join('\n');
                 select.disabled = projects.length === 0;
                 updateRunGitleaksButtonState();
+                updateGitleaksModeForSelection();
             });
         }
     </script>

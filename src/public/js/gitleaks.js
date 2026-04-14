@@ -557,9 +557,18 @@ function getPayload() {
   const projectSelect = byId('selGitleaksProject');
   const excludeGitIgnoredCheckbox = byId('chkExcludeGitIgnored');
 
+  const gitModeRadio = document.querySelector('input[name="gitleaksMode"][value="git"]');
+
+  let mode = 'dir';
+
+  if (gitModeRadio?.checked && !gitModeRadio?.disabled) {
+    mode = 'git';
+  }
+
   return {
     directory: projectSelect?.value || '',
-    excludeGitIgnored: excludeGitIgnoredCheckbox ? !!excludeGitIgnoredCheckbox.checked : true
+    excludeGitIgnored: excludeGitIgnoredCheckbox ? !!excludeGitIgnoredCheckbox.checked : true,
+    mode
   };
 }
 
