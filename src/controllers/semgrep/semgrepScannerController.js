@@ -206,8 +206,15 @@ async function buildScannerConfig(payload) {
   const sources = normalizeList(payload.txtSources);
   const exclusions = normalizeList(payload.txtExclusions);
   const configFlags = normalizeList(payload.configFlags);
-  const rulesFilePath = await buildRulesFile(semgrepWorkingDirectory, globalConfig);
-  const rulesFilePathContainer = toContainerWorkspacePath(rulesFilePath);
+  const includeRulesFile = typeof payload.includeRulesFile === 'boolean' ? payload.includeRulesFile : true;
+
+  let rulesFilePath = '';
+  let rulesFilePathContainer = '';
+
+  if (includeRulesFile) {
+    rulesFilePath = await buildRulesFile(semgrepWorkingDirectory, globalConfig);
+    rulesFilePathContainer = toContainerWorkspacePath(rulesFilePath);
+  }
   const projectBaseDirContainer = toContainerWorkspacePath(projectBaseDir);
   const args = buildSemgrepArgs({
     rulesFilePath,

@@ -142,7 +142,8 @@ function getPayload() {
     projectName: byId('selSemgrepProject')?.value || '',
     txtSources: byId('txtSemgrepSources')?.value || '',
     txtExclusions: byId('txtSemgrepExclusions')?.value || '',
-    configFlags: getSelectedSemgrepConfigFlags()
+    configFlags: getSelectedSemgrepConfigFlags(),
+    includeRulesFile: !!byId('chkIncludeSemgrepRules')?.checked
   };
 }
 
