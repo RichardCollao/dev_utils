@@ -64,12 +64,9 @@ function buildConfigFilePath(directoryRelative) {
 
 function normalizeSonarBundle(raw) {
   const safe = raw && typeof raw === 'object' ? raw : {};
-  const legacyGlobal = safe.global && typeof safe.global === 'object' ? safe.global : {};
   const projects = Array.isArray(safe.projects) ? safe.projects : [];
 
   return {
-    sonarToken: String(legacyGlobal.sonarToken || '').trim(),
-    semgrepRules: typeof legacyGlobal.semgrepRules === 'string' ? legacyGlobal.semgrepRules : '',
     projects: projects
       .filter(function (item) {
         return item && typeof item === 'object';
@@ -132,13 +129,11 @@ async function getBundle() {
   const semgrepRaw = await readRawBundleFromLocation(semgrepLocation);
 
   const sonarTokenFromSonarConfig = String(sonarRaw.sonarToken || '').trim();
-  const sonarTokenFromMain = baseBundle.sonarToken;
-  const sonarToken = sonarTokenFromSonarConfig || sonarTokenFromMain || '';
+  const sonarToken = sonarTokenFromSonarConfig || '';
 
   const semgrepRulesFromSemgrepConfig =
     typeof semgrepRaw.semgrepRules === 'string' ? semgrepRaw.semgrepRules : '';
-  const semgrepRulesFromMain = baseBundle.semgrepRules;
-  const semgrepRules = semgrepRulesFromSemgrepConfig || semgrepRulesFromMain || '';
+  const semgrepRules = semgrepRulesFromSemgrepConfig || '';
 
   const bundle = {
     sonarToken,
@@ -150,13 +145,30 @@ async function getBundle() {
 }
 
 async function writeBundle(bundleInput) {
-  const safeBundle = normalizeSonarBundle(bundleInput);
+  const safeInput = bundleInput && typeof bundleInput === 'object' ? bundleInput : {};
+  const projects = Array.isArray(safeInput.projects)
+    ? safeInput.projects
+      .filter(function (item) { return item && typeof item === 'object'; })
+      .map(function (item) {
+        const projectName = String(item.projectName || item.sonarProjectKey || '').trim();
+        const projectBaseDir = String(item.projectBaseDir || item.sonarProjectBaseDir || '').trim();
+
+        return {
+          projectName,
+          projectBaseDir
+        };
+      })
+      .filter(function (item) { return !!item.projectName; })
+    : [];
+
+  const sonarToken = String(safeInput.sonarToken || '').trim();
+  const semgrepRules = typeof safeInput.semgrepRules === 'string' ? safeInput.semgrepRules : '';
   const mainLocation = buildConfigFilePath(GLOBAL_CONFIG_DIR_RELATIVE);
   const currentMainRaw = await readRawBundleFromLocation(mainLocation);
   const nextMainRaw = {
     ...(currentMainRaw && typeof currentMainRaw === 'object' ? currentMainRaw : {}),
     global: undefined,
-    projects: safeBundle.projects
+    projects
   };
 
   await fs.mkdir(mainLocation.absoluteDirectory, { recursive: true });
@@ -166,7 +178,7 @@ async function writeBundle(bundleInput) {
   const currentSonarRaw = await readRawBundleFromLocation(sonarLocation);
   const nextSonarRaw = {
     ...(currentSonarRaw && typeof currentSonarRaw === 'object' ? currentSonarRaw : {}),
-    sonarToken: safeBundle.sonarToken
+    sonarToken
   };
 
   await fs.mkdir(sonarLocation.absoluteDirectory, { recursive: true });
@@ -176,13 +188,19 @@ async function writeBundle(bundleInput) {
   const currentSemgrepRaw = await readRawBundleFromLocation(semgrepLocation);
   const nextSemgrepRaw = {
     ...(currentSemgrepRaw && typeof currentSemgrepRaw === 'object' ? currentSemgrepRaw : {}),
-    semgrepRules: safeBundle.semgrepRules
+    semgrepRules
   };
 
   await fs.mkdir(semgrepLocation.absoluteDirectory, { recursive: true });
   await fs.writeFile(semgrepLocation.filePath, JSON.stringify(nextSemgrepRaw, null, 2), 'utf8');
 
-  return { bundle: safeBundle, ...mainLocation };
+  const bundle = {
+    sonarToken,
+    semgrepRules,
+    projects
+  };
+
+  return { bundle, ...mainLocation };
 }
 
 function getDefaultSonarWorkingDirectory() {
