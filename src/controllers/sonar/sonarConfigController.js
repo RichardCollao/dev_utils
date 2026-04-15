@@ -1,13 +1,11 @@
 const fs = require('node:fs/promises');
 const {
-  getSonarHostUrl,
-  getSonarWorkingDirectory,
-  getSonarConfigPath
+  getSonarHostUrl
 } = require('../../utils/envConfig');
 const {
-  resolveWorkspacePath,
   getBundle,
   writeBundle,
+  getDefaultSonarWorkingDirectory,
   getAppBundle,
   writeAppBundle
 } = require('../../utils/configStore');
@@ -23,16 +21,11 @@ function renderSonarConfig(req, res) {
 async function getGlobalConfig(req, res) {
   try {
     const sonarHostUrl = getSonarHostUrl();
-    const sonarWorkingDirectory = getSonarWorkingDirectory();
-    const sonarConfigPath = getSonarConfigPath();
     const { bundle } = await getBundle();
-    const global = bundle?.global || {};
 
     const data = {
-      sonarToken: String(global.sonarToken || '').trim(),
-      sonarHostUrl,
-      sonarWorkingDirectory,
-      sonarConfigPath
+      sonarToken: String(bundle?.sonarToken || '').trim(),
+      sonarHostUrl
     };
 
     return res.json({ success: true, data });
@@ -42,9 +35,7 @@ async function getGlobalConfig(req, res) {
 }
 
 async function buildWorkingDirectoryWarning(workingDir) {
-  if (!workingDir) return null;
-
-  const resolved = resolveWorkspacePath(workingDir);
+  const resolved = getDefaultSonarWorkingDirectory();
 
   try {
     const stat = await fs.stat(resolved);
@@ -87,8 +78,6 @@ async function saveGlobalConfig(req, res) {
     const payload = req.body || {};
     const missing = REQUIRED_GLOBAL_FIELDS.filter(function(field) { return !payload[field] || !String(payload[field]).trim(); });
     const sonarHostUrl = getSonarHostUrl();
-    const sonarWorkingDirectory = getSonarWorkingDirectory();
-    const sonarConfigPath = getSonarConfigPath();
 
     if (missing.length > 0) {
       return res.status(400).json({
@@ -98,27 +87,22 @@ async function saveGlobalConfig(req, res) {
     }
 
     const current = await getBundle();
-    const currentGlobal = current?.bundle?.global && typeof current.bundle.global === 'object'
-      ? current.bundle.global
-      : {};
-
     const data = {
       sonarToken: String(payload.sonarToken).trim(),
-      semgrepRules: typeof currentGlobal.semgrepRules === 'string' ? currentGlobal.semgrepRules : '',
-      sonarWorkingDirectory,
-      sonarConfigPath
+      semgrepRules: typeof current?.bundle?.semgrepRules === 'string' ? current.bundle.semgrepRules : ''
     };
 
     const nextBundle = {
-      global: data,
+      sonarToken: data.sonarToken,
+      semgrepRules: data.semgrepRules,
       projects: Array.isArray(current?.bundle?.projects) ? current.bundle.projects : []
     };
 
-    await writeBundle(nextBundle, data.sonarConfigPath);
+    await writeBundle(nextBundle);
 
     const warnings = [];
 
-    const workingDirWarning = await buildWorkingDirectoryWarning(data.sonarWorkingDirectory);
+    const workingDirWarning = await buildWorkingDirectoryWarning();
     if (workingDirWarning) warnings.push(workingDirWarning);
 
     const localhostWarning = buildLocalhostWarning(sonarHostUrl);

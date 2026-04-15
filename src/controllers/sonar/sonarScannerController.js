@@ -7,7 +7,8 @@ const { WebSocketServer } = require('ws');
 const { getSonarHostUrl } = require('../../utils/envConfig');
 const {
   getBundle,
-  resolveWorkspacePath
+  resolveWorkspacePath,
+  getDefaultSonarWorkingDirectory
 } = require('../../utils/configStore');
 const SESSION_TTL_MS = 60 * 1000;
 const scannerSessions = new Map();
@@ -191,7 +192,10 @@ function normalizeList(rawValue = '') {
 
 async function readGlobalConfig() {
   const { bundle } = await getBundle();
-  return bundle?.global || {};
+  return {
+    sonarToken: bundle?.sonarToken || '',
+    semgrepRules: bundle?.semgrepRules || ''
+  };
 }
 
 async function readProjectConfig(projectKey) {
@@ -353,14 +357,6 @@ function sendSocketMessage(ws, message) {
   ws.send(JSON.stringify(message));
 }
 
-
-function resolveWorkingDir(globalConfig, projectConfig) {
-  const globalWorkingDir = resolveWorkspacePath(globalConfig.sonarWorkingDirectory);
-  if (globalWorkingDir) return globalWorkingDir;
-
-  return resolveWorkspacePath(projectConfig.projectBaseDir);
-}
-
 async function resolveShellCwd(session) {
   const sessionWorkingDirectory = String(session?.workingDirectory || '').trim();
 
@@ -369,13 +365,9 @@ async function resolveShellCwd(session) {
   }
 
   try {
-    const globalConfig = await readGlobalConfig();
-    const globalWorkingDirectory = resolveWorkspacePath(globalConfig.sonarWorkingDirectory);
-
-    if (globalWorkingDirectory) {
-      await ensureDirectoryExists(globalWorkingDirectory, 'sonarWorkingDirectory');
-      return globalWorkingDirectory;
-    }
+    const defaultWorkingDirectory = getDefaultSonarWorkingDirectory();
+    await ensureDirectoryExists(defaultWorkingDirectory, 'directorio de trabajo de SonarScanner');
+    return defaultWorkingDirectory;
   } catch {
   }
 
@@ -420,16 +412,16 @@ async function buildScannerConfig(payload) {
   const sonarToken = String(globalConfig.sonarToken || '').trim();
   const sonarHostUrl = getSonarHostUrl();
   const projectBaseDir = resolveWorkspacePath(projectConfig.projectBaseDir);
-  const workingDirectory = resolveWorkingDir(globalConfig, projectConfig);
+  const workingDirectory = getDefaultSonarWorkingDirectory();
 
   if (!sonarToken || !sonarHostUrl || !projectBaseDir || !workingDirectory) {
-    const error = new Error('Configuración incompleta. Verifique token, host, directorio proyecto y sonarWorkingDirectory.');
+    const error = new Error('Configuración incompleta. Verifique token, host, directorio del proyecto y directorio de trabajo de SonarScanner.');
     error.status = 400;
     throw error;
   }
 
   await ensureDirectoryExists(projectBaseDir, 'directorio proyecto');
-  await ensureDirectoryExists(workingDirectory, 'sonarWorkingDirectory');
+  await ensureDirectoryExists(workingDirectory, 'directorio de trabajo de SonarScanner');
 
   const sources = normalizeList(payload.txtSources);
   const exclusions = normalizeList(payload.txtExclusions);

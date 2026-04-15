@@ -1,8 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
-  getSonarConfigPath,
-  getSonarWorkingDirectory,
   getSemgrepWorkingDirectory
 } = require('../../utils/envConfig');
 const {
@@ -27,14 +25,12 @@ async function readDefaultRules() {
 async function getGlobalConfig(req, res) {
   try {
     const { bundle } = await getBundle();
-    const global = bundle?.global || {};
-    const configuredRules = typeof global.semgrepRules === 'string' ? global.semgrepRules : '';
+    const configuredRules = typeof bundle?.semgrepRules === 'string' ? bundle.semgrepRules : '';
     const semgrepRules = configuredRules.trim() ? configuredRules : await readDefaultRules();
 
     const data = {
       semgrepRules,
-      semgrepWorkingDirectory: getSemgrepWorkingDirectory(),
-      sonarConfigPath: getSonarConfigPath()
+      semgrepWorkingDirectory: getSemgrepWorkingDirectory()
     };
 
     return res.json({ success: true, data });
@@ -56,22 +52,14 @@ async function saveGlobalConfig(req, res) {
   try {
     const payload = req.body || {};
     const { bundle } = await getBundle();
-    const currentGlobal = bundle?.global && typeof bundle.global === 'object' ? bundle.global : {};
 
-    const nextGlobal = {
-      sonarToken: String(currentGlobal.sonarToken || '').trim(),
+    const nextBundle = {
+      sonarToken: bundle?.sonarToken || '',
       semgrepRules: typeof payload.semgrepRules === 'string' ? payload.semgrepRules : '',
-      sonarWorkingDirectory: String(currentGlobal.sonarWorkingDirectory || getSonarWorkingDirectory()).trim(),
-      sonarConfigPath: String(currentGlobal.sonarConfigPath || getSonarConfigPath()).trim()
+      projects: Array.isArray(bundle?.projects) ? bundle.projects : []
     };
 
-    await writeBundle(
-      {
-        global: nextGlobal,
-        projects: Array.isArray(bundle?.projects) ? bundle.projects : []
-      },
-      nextGlobal.sonarConfigPath
-    );
+    await writeBundle(nextBundle);
 
     return res.json({ success: true });
   } catch {

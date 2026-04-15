@@ -80,10 +80,8 @@ async function postToSonarApi(sonarHostUrl, sonarToken, endpoint, payload = {}) 
 
 async function resolveConfig() {
   const { bundle } = await getBundle();
-  const globalConfig = bundle?.global || {};
-
   const sonarHostUrl = normalizeHostUrl(getSonarHostUrl());
-  const sonarToken = String(globalConfig.sonarToken || '').trim();
+  const sonarToken = String(bundle?.sonarToken || '').trim();
 
   if (!sonarHostUrl || !sonarToken) {
     const error = new Error('Configuración global incompleta.');
@@ -213,10 +211,8 @@ async function createProject(req, res) {
 
     await writeBundle(
       {
-        global: store.bundle.global,
         projects: nextProjects
-      },
-      store.bundle.global.sonarConfigPath
+      }
     );
 
 
@@ -310,10 +306,8 @@ async function updateProject(req, res) {
 
     await writeBundle(
       {
-        global: store.bundle.global,
         projects: nextProjects
-      },
-      store.bundle.global.sonarConfigPath
+      }
     );
 
     return res.json({
@@ -366,10 +360,8 @@ async function deleteProject(req, res) {
 
     await writeBundle(
       {
-        global: store.bundle.global,
         projects: nextProjects
-      },
-      store.bundle.global.sonarConfigPath
+      }
     );
 
 

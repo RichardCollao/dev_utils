@@ -2,20 +2,8 @@ function getSonarHostUrl() {
   return String(process.env.sonarHostUrl || '').trim();
 }
 
-function getSonarWorkingDirectory() {
-  return String(process.env.sonarWorkingDirectory || 'sonar/temp').trim();
-}
-
-function getSonarConfigPath() {
-  return String(process.env.sonarConfigPath || 'sonar').trim();
-}
-
 function getSemgrepWorkingDirectory() {
-  return String(process.env.semgrepWorkingDirectory || 'semgrep/temp').trim();
-}
-
-function getAppConfigDirectory() {
-  return 'devutils';
+  return String(process.env.semgrepWorkingDirectory || 'devutils/semgrep/temp').trim();
 }
 
 function getWorkspaceBaseDir() {
@@ -28,9 +16,6 @@ function getWorkspaceBaseDir() {
 
 module.exports = {
   getSonarHostUrl,
-  getSonarWorkingDirectory,
-  getSonarConfigPath,
   getSemgrepWorkingDirectory,
-  getAppConfigDirectory,
   getWorkspaceBaseDir
 };

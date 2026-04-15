@@ -1,14 +1,14 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
-  getSonarWorkingDirectory,
-  getSonarConfigPath,
-  getAppConfigDirectory,
   getWorkspaceBaseDir
 } = require('./envConfig');
 
 const WORKSPACE_BASE_DIR = getWorkspaceBaseDir();
 const CONFIG_FILE_NAME = 'config.json';
+const GLOBAL_CONFIG_DIR_RELATIVE = 'devutils/config';
+const SONAR_CONFIG_DIR_RELATIVE = 'devutils/sonar';
+const SEMGREP_CONFIG_DIR_RELATIVE = 'devutils/semgrep';
 
 function resolveWorkspacePath(storedPath = '') {
   const raw = String(storedPath || '').trim();
@@ -63,19 +63,13 @@ function buildConfigFilePath(directoryRelative) {
 }
 
 function normalizeSonarBundle(raw) {
-  const sonarWorkingDirectory = getSonarWorkingDirectory();
-  const sonarConfigPath = getSonarConfigPath();
   const safe = raw && typeof raw === 'object' ? raw : {};
-  const global = safe.global && typeof safe.global === 'object' ? safe.global : {};
+  const legacyGlobal = safe.global && typeof safe.global === 'object' ? safe.global : {};
   const projects = Array.isArray(safe.projects) ? safe.projects : [];
 
   return {
-    global: {
-      sonarToken: String(global.sonarToken || '').trim(),
-      semgrepRules: typeof global.semgrepRules === 'string' ? global.semgrepRules : '',
-      sonarWorkingDirectory,
-      sonarConfigPath
-    },
+    sonarToken: String(legacyGlobal.sonarToken || '').trim(),
+    semgrepRules: typeof legacyGlobal.semgrepRules === 'string' ? legacyGlobal.semgrepRules : '',
     projects: projects
       .filter(function (item) {
         return item && typeof item === 'object';
@@ -115,82 +109,125 @@ function normalizeAppBundle(raw) {
 }
 
 async function getBundle() {
-  const sonarConfigPath = getSonarConfigPath();
-  const location = buildConfigFilePath(sonarConfigPath);
+  const mainLocation = buildConfigFilePath(GLOBAL_CONFIG_DIR_RELATIVE);
 
-  let raw;
+  let mainRaw;
   try {
-    raw = await fs.readFile(location.filePath, 'utf8');
+    const raw = await fs.readFile(mainLocation.filePath, 'utf8');
+    mainRaw = JSON.parse(raw);
   } catch (error) {
-    if (error?.code !== 'ENOENT') {
+    if (error?.code === 'ENOENT') {
+      mainRaw = {};
+    } else {
       throw error;
-    }
-
-    const legacyLocation = buildConfigFilePath('sonar/config_directory');
-    try {
-      raw = await fs.readFile(legacyLocation.filePath, 'utf8');
-      const bundle = normalizeSonarBundle(JSON.parse(raw));
-      return { bundle, ...legacyLocation };
-    } catch (legacyError) {
-      if (legacyError?.code === 'ENOENT') {
-        return { bundle: normalizeSonarBundle({}), ...location };
-      }
-      throw legacyError;
     }
   }
 
-  const bundle = normalizeSonarBundle(JSON.parse(raw));
+  const baseBundle = normalizeSonarBundle(mainRaw);
 
-  return { bundle, ...location };
-}
+  const sonarLocation = buildConfigFilePath(SONAR_CONFIG_DIR_RELATIVE);
+  const sonarRaw = await readRawBundleFromLocation(sonarLocation);
 
-async function writeBundle(bundleInput, directoryRelative) {
-  const safeBundle = normalizeSonarBundle(bundleInput);
-  const rawDir = String(directoryRelative || '').trim() || safeBundle.global.sonarConfigPath;
-  const targetDirectory = normalizeDirectory(rawDir);
-  const location = buildConfigFilePath(targetDirectory);
-  const currentRawBundle = await readRawBundleFromLocation(location);
+  const semgrepLocation = buildConfigFilePath(SEMGREP_CONFIG_DIR_RELATIVE);
+  const semgrepRaw = await readRawBundleFromLocation(semgrepLocation);
 
-  safeBundle.global.sonarConfigPath = targetDirectory;
+  const sonarTokenFromSonarConfig = String(sonarRaw.sonarToken || '').trim();
+  const sonarTokenFromMain = baseBundle.sonarToken;
+  const sonarToken = sonarTokenFromSonarConfig || sonarTokenFromMain || '';
 
-  const mergedBundle = {
-    ...(currentRawBundle && typeof currentRawBundle === 'object' ? currentRawBundle : {}),
-    ...safeBundle
+  const semgrepRulesFromSemgrepConfig =
+    typeof semgrepRaw.semgrepRules === 'string' ? semgrepRaw.semgrepRules : '';
+  const semgrepRulesFromMain = baseBundle.semgrepRules;
+  const semgrepRules = semgrepRulesFromSemgrepConfig || semgrepRulesFromMain || '';
+
+  const bundle = {
+    sonarToken,
+    semgrepRules,
+    projects: baseBundle.projects
   };
 
-  await fs.mkdir(location.absoluteDirectory, { recursive: true });
-  await fs.writeFile(location.filePath, JSON.stringify(mergedBundle, null, 2), 'utf8');
+  return { bundle, ...mainLocation };
+}
 
-  return { bundle: safeBundle, ...location };
+async function writeBundle(bundleInput) {
+  const safeBundle = normalizeSonarBundle(bundleInput);
+  const mainLocation = buildConfigFilePath(GLOBAL_CONFIG_DIR_RELATIVE);
+  const currentMainRaw = await readRawBundleFromLocation(mainLocation);
+  const nextMainRaw = {
+    ...(currentMainRaw && typeof currentMainRaw === 'object' ? currentMainRaw : {}),
+    global: undefined,
+    projects: safeBundle.projects
+  };
+
+  await fs.mkdir(mainLocation.absoluteDirectory, { recursive: true });
+  await fs.writeFile(mainLocation.filePath, JSON.stringify(nextMainRaw, null, 2), 'utf8');
+
+  const sonarLocation = buildConfigFilePath(SONAR_CONFIG_DIR_RELATIVE);
+  const currentSonarRaw = await readRawBundleFromLocation(sonarLocation);
+  const nextSonarRaw = {
+    ...(currentSonarRaw && typeof currentSonarRaw === 'object' ? currentSonarRaw : {}),
+    sonarToken: safeBundle.sonarToken
+  };
+
+  await fs.mkdir(sonarLocation.absoluteDirectory, { recursive: true });
+  await fs.writeFile(sonarLocation.filePath, JSON.stringify(nextSonarRaw, null, 2), 'utf8');
+
+  const semgrepLocation = buildConfigFilePath(SEMGREP_CONFIG_DIR_RELATIVE);
+  const currentSemgrepRaw = await readRawBundleFromLocation(semgrepLocation);
+  const nextSemgrepRaw = {
+    ...(currentSemgrepRaw && typeof currentSemgrepRaw === 'object' ? currentSemgrepRaw : {}),
+    semgrepRules: safeBundle.semgrepRules
+  };
+
+  await fs.mkdir(semgrepLocation.absoluteDirectory, { recursive: true });
+  await fs.writeFile(semgrepLocation.filePath, JSON.stringify(nextSemgrepRaw, null, 2), 'utf8');
+
+  return { bundle: safeBundle, ...mainLocation };
+}
+
+function getDefaultSonarWorkingDirectory() {
+  return resolveWorkspacePath('devutils/sonar/temp');
 }
 
 async function getAppBundle() {
-  const appConfigDirectory = getAppConfigDirectory();
-  const absoluteDirectory = path.resolve(WORKSPACE_BASE_DIR, appConfigDirectory);
-  const filePath = path.join(absoluteDirectory, CONFIG_FILE_NAME);
+  const mainLocation = buildConfigFilePath(GLOBAL_CONFIG_DIR_RELATIVE);
 
   let raw;
   try {
-    raw = await fs.readFile(filePath, 'utf8');
+    const text = await fs.readFile(mainLocation.filePath, 'utf8');
+    raw = JSON.parse(text);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
-    return { bundle: normalizeAppBundle({}), absoluteDirectory, filePath };
+    return {
+      bundle: normalizeAppBundle({}),
+      absoluteDirectory: mainLocation.absoluteDirectory,
+      filePath: mainLocation.filePath
+    };
   }
 
-  const bundle = normalizeAppBundle(JSON.parse(raw));
-  return { bundle, absoluteDirectory, filePath };
+  const appRaw = raw && typeof raw === 'object' && raw.app && typeof raw.app === 'object'
+    ? raw.app
+    : {};
+
+  const bundle = normalizeAppBundle(appRaw);
+  return { bundle, absoluteDirectory: mainLocation.absoluteDirectory, filePath: mainLocation.filePath };
 }
 
 async function writeAppBundle(appBundleInput) {
   const safeBundle = normalizeAppBundle(appBundleInput);
-  const appConfigDirectory = getAppConfigDirectory();
-  const absoluteDirectory = path.resolve(WORKSPACE_BASE_DIR, appConfigDirectory);
-  const filePath = path.join(absoluteDirectory, CONFIG_FILE_NAME);
+  const mainLocation = buildConfigFilePath(GLOBAL_CONFIG_DIR_RELATIVE);
+  const currentMainRaw = await readRawBundleFromLocation(mainLocation);
+  const baseMain = currentMainRaw && typeof currentMainRaw === 'object' ? currentMainRaw : {};
 
-  await fs.mkdir(absoluteDirectory, { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(safeBundle, null, 2), 'utf8');
+  const nextMainRaw = {
+    ...baseMain,
+    app: safeBundle
+  };
 
-  return { bundle: safeBundle, absoluteDirectory, filePath };
+  await fs.mkdir(mainLocation.absoluteDirectory, { recursive: true });
+  await fs.writeFile(mainLocation.filePath, JSON.stringify(nextMainRaw, null, 2), 'utf8');
+
+  return { bundle: safeBundle, absoluteDirectory: mainLocation.absoluteDirectory, filePath: mainLocation.filePath };
 }
 
 module.exports = {
@@ -198,6 +235,7 @@ module.exports = {
   resolveWorkspacePath,
   getBundle,
   writeBundle,
+  getDefaultSonarWorkingDirectory,
   getAppBundle,
   writeAppBundle
 };

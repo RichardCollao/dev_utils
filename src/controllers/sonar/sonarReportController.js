@@ -328,10 +328,8 @@ async function resolveConfigAndProject(projectKey) {
 
   const sonarHostUrl = normalizeHostUrl(getSonarHostUrl());
   const { bundle } = await getBundle();
-  const global = bundle?.global || {};
   const projects = Array.isArray(bundle?.projects) ? bundle.projects : [];
-
-  const sonarToken = String(global.sonarToken || '').trim();
+  const sonarToken = String(bundle?.sonarToken || '').trim();
 
   if (!sonarHostUrl || !sonarToken) {
     const error = new Error('Configuración global incompleta para SonarQube.');

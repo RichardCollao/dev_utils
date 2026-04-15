@@ -128,7 +128,10 @@ async function readProjectConfig(projectKey) {
 
 async function readGlobalConfig() {
   const { bundle } = await getBundle();
-  return bundle?.global || {};
+  return {
+    sonarToken: bundle?.sonarToken || '',
+    semgrepRules: bundle?.semgrepRules || ''
+  };
 }
 
 async function buildRulesFile(workingDirectory, globalConfig) {
