@@ -13,7 +13,7 @@
         </div>
         <div class="mb-3">
           <label for="selCompare" class="form-label fw-semibold">Compare</label>
-          <select id="selCompare" class="form-select"></select>
+          <select id="selCompare" class="form-select" disabled></select>
         </div>
       </div>
       <div class="modal-footer">
@@ -44,14 +44,29 @@
       const selBase = document.getElementById('selBase');
       const selCompare = document.getElementById('selCompare');
       selBase.innerHTML = options;
-      selCompare.innerHTML = options;
+      selCompare.disabled = true;
 
       if (response.baseBranch && response.data.includes(response.baseBranch)) {
         selBase.value = response.baseBranch;
       }
-      if (response.currentBranch && response.data.includes(response.currentBranch)) {
-        selCompare.value = response.currentBranch;
+
+      const currentBranch = response.currentBranch && response.data.includes(response.currentBranch)
+        ? response.currentBranch
+        : '';
+
+      if (!currentBranch) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Atención',
+          text: 'No fue posible detectar la rama actual del proyecto para comparar.'
+        });
+        return;
       }
+
+      selCompare.innerHTML = '<option value="' + currentBranch + '">' + currentBranch + '</option>';
+      selCompare.value = currentBranch;
+      selCompare.dataset.fixedBranch = currentBranch;
+
       const modal = new bootstrap.Modal(document.getElementById('modalDiff'));
       modal.show();
     });
@@ -61,7 +76,8 @@
     const selProject = document.querySelector('#selProject');
     const projectKey = selProject ? selProject.value : '';
     const base = document.getElementById('selBase').value;
-    const compare = document.getElementById('selCompare').value;
+    const compareElement = document.getElementById('selCompare');
+    const compare = (compareElement?.dataset.fixedBranch || compareElement?.value || '').trim();
 
     if (!projectKey || !base || !compare) {
       Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona proyecto y ramas para comparar.' });
