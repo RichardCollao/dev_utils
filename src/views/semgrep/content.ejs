@@ -307,14 +307,28 @@
         const selBase = document.getElementById('selSemgrepBase');
         const selCompare = document.getElementById('selSemgrepCompare');
         selBase.innerHTML = options;
-        selCompare.innerHTML = options;
+        selCompare.disabled = true;
 
         if (response.baseBranch && response.data.includes(response.baseBranch)) {
           selBase.value = response.baseBranch;
         }
-        if (response.currentBranch && response.data.includes(response.currentBranch)) {
-          selCompare.value = response.currentBranch;
+
+        const currentBranch = response.currentBranch && response.data.includes(response.currentBranch)
+          ? response.currentBranch
+          : '';
+
+        if (!currentBranch) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Atención',
+            text: 'No fue posible detectar la rama actual del proyecto para comparar.'
+          });
+          return;
         }
+
+        selCompare.innerHTML = '<option value="' + currentBranch + '">' + currentBranch + '</option>';
+        selCompare.value = currentBranch;
+        selCompare.dataset.fixedBranch = currentBranch;
 
         const modal = new bootstrap.Modal(document.getElementById('modalSemgrepDiff'));
         modal.show();
@@ -324,7 +338,8 @@
     function confirmSemgrepDiff() {
       const projectKey = (document.querySelector('#selSemgrepProject')?.value || '').trim();
       const base = document.getElementById('selSemgrepBase').value;
-      const compare = document.getElementById('selSemgrepCompare').value;
+      const compareElement = document.getElementById('selSemgrepCompare');
+      const compare = (compareElement?.dataset.fixedBranch || compareElement?.value || '').trim();
 
       if (!projectKey || !base || !compare) {
         Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona proyecto y ramas para comparar.' });
