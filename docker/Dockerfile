@@ -41,14 +41,14 @@ ENV JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 
 # Se copia scripts/ antes de npm ci porque el postinstall
 # ejecuta scripts/copy-vendor.js (copia assets de node_modules).
-COPY dev_utils/package*.json ./ 
-COPY dev_utils/scripts/ ./scripts/
+COPY package*.json ./ 
+COPY scripts/ ./scripts/
 # Instala dependencias exactas desde package-lock.json
 # omite las de desarrollo y limpia la caché para reducir la imagen.
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ── Código de la app ─────────────────────────────────────────────
-COPY dev_utils/ .
+COPY . .
 
 # Carpetas de escritura en runtime
 RUN mkdir -p /www/dev_utils/logs \
