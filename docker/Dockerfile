@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     curl \
+    docker.io \
     git \
     openjdk-17-jre-headless \
   && rm -rf /var/lib/apt/lists/* \

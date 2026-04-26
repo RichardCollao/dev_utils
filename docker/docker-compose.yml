@@ -22,6 +22,7 @@ services:
       context: ..                            # raíz del proyecto (dev_utils/)
       dockerfile: docker/Dockerfile
     container_name: dev_utils
+    user: root
     depends_on:
       - sonarqube
     ports:
@@ -35,6 +36,11 @@ services:
       - type: bind
         source: *host_root
         target: /workspace
+      # Necesario para ejecutar `docker exec ...` desde la app
+      # (SemgrepScanner / GitleaksScanner lanzados por node-pty).
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
     networks:
       - sonar_net
 
