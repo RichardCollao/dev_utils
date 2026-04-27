@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DevUtils - Manual de uso resumido</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --muted: #475569;
+            --line: #e2e8f0;
+            --primary: #2563eb;
+            --ok: #166534;
+            --warn: #92400e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.45;
+        }
+
+        .container {
+            width: min(1080px, 92vw);
+            margin: 24px auto 48px;
+        }
+
+        .hero {
+            background: var(--card);
+            color: var(--text);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: none;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin: 0 0 10px;
+        }
+
+        h1 {
+            font-size: 1.55rem;
+        }
+
+        h2 {
+            font-size: 1.1rem;
+            margin-top: 24px;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 8px;
+        }
+
+        p,
+        li {
+            color: var(--muted);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
+            margin-top: 14px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .tag {
+            display: inline-block;
+            font-size: .78rem;
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-bottom: 8px;
+        }
+
+        .ok {
+            color: var(--ok);
+            font-weight: 600;
+        }
+
+        .warn {
+            color: var(--warn);
+            font-weight: 600;
+        }
+
+        ol,
+        ul {
+            padding-left: 20px;
+        }
+
+        .footer {
+            margin-top: 24px;
+            font-size: .9rem;
+            color: #64748b;
+            border-top: 1px solid var(--line);
+            padding-top: 12px;
+        }
+
+        code {
+            background: #eef2ff;
+            border: 1px solid #e0e7ff;
+            border-radius: 6px;
+            padding: 1px 6px;
+            color: #312e81;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <section class="hero">
+            <h1>DevUtils - Manual de uso</h1>
+            <p style="margin: 8px 0 0;">
+                Guía rápida para configurar proyectos, ejecutar análisis en Sonar/Semgrep/Gitleaks,
+                usar diff de ramas y generar reportes.
+            </p>
+            <p style="margin: 6px 0 0;">
+                <strong>Nota:</strong> el uso de <strong>diff</strong> es opcional en Sonar y Semgrep.
+            </p>
+        </section>
+
+        <h2>1) Arranque del sistema</h2>
+        <div class="grid">
+            <article class="card">
+                <span class="tag">Levantar Docker</span>
+                <ol>
+                    <li><strong>Antes de ejecutar cualquier comando</strong>, configurar en
+                        <code>docker/docker-compose.yml</code> la ruta base del volumen <code>HOST_ROOT</code>
+                        (debe apuntar al directorio que contiene los proyectos a analizar).
+                        <br>Ejemplo (si <code>www</code> es la carpeta que contiene los proyectos):
+                        <code>host_root: &host_root ${HOST_ROOT:-C:/www}</code>
+                    </li>
+                    <li>Una vez configurada la ruta, desde la raíz del proyecto ejecutar:
+                        <code>docker compose -f docker/docker-compose.yml up -d --force-recreate</code>.
+                    </li>
+                    <li>Verificar contenedores: <code>dev_utils</code>, <code>sonarqube</code>, <code>semgrep</code>,
+                        <code>gitleaks</code>.
+                    </li>
+                    <li>Abrir <code>http://localhost:3000</code>.</li>
+                </ol>
+            </article>
+        </div>
+
+        <h2>2) Configuración principal (crear proyectos)</h2>
+        <div class="card">
+            <p><strong>Ruta:</strong> menú superior → ícono de engranaje → <code>/app_config</code>.</p>
+            <ol>
+                <li>Ir a <strong>Proyectos</strong> y presionar <strong>Crear proyecto</strong>.</li>
+                <li>Completar:
+                    <ul>
+                        <li><strong>nombre proyecto</strong>: solo letras y números.</li>
+                        <li><strong>directorio proyecto</strong>: ruta relativa a <code>workspaceBaseDir</code> (se
+                            puede elegir con el explorador).</li>
+                    </ul>
+                </li>
+                <li>Guardar. El proyecto queda disponible para Sonar, Semgrep y Gitleaks.</li>
+            </ol>
+            <p class="warn">Importante: si el directorio no existe o queda fuera del workspace, el escaneo fallará.</p>
+        </div>
+
+        <h2>3) Configuraciones globales de módulos</h2>
+        <div class="grid">
+            <article class="card">
+                <h3>Sonar configuración</h3>
+                <p><strong>Ruta:</strong> <code>/sonar_config</code>.</p>
+                <ul>
+                    <li>Ingresar <code>sonarToken</code>.</li>
+                    <li>Guardar.</li>
+                    <li><code>sonarHostUrl</code> viene de <code>.env</code> (en UI se usa localhost:9000).</li>
+                </ul>
+            </article>
+            <article class="card">
+                <h3>Semgrep configuración</h3>
+                <p><strong>Ruta:</strong> <code>/semgrep_config</code>.</p>
+                <ul>
+                    <li>Editar reglas YAML personalizadas.</li>
+                    <li>Opcional: restaurar reglas por defecto.</li>
+                    <li>Guardar configuración.</li>
+                </ul>
+            </article>
+        </div>
+
+        <h2>4) Flujo por módulo</h2>
+
+        <div class="card">
+            <h3>4.1 Sonar</h3>
+            <ol>
+                <li>Entrar a <code>/sonar</code>.</li>
+                <li>Seleccionar proyecto en el combo.</li>
+                <li>(Opcional) usar <strong>diff</strong>:
+                    <ul>
+                        <li>Click en <strong>diff</strong>.</li>
+                        <li>Elegir rama base (Base) y comparar contra rama actual (Current).</li>
+                        <li>Confirmar para cargar archivos cambiados en <strong>SOURCES</strong>.</li>
+                    </ul>
+                </li>
+                <li>Ajustar <strong>SOURCES</strong> y <strong>EXCLUSIONS</strong> si aplica.</li>
+                <li>Ejecutar <strong>SonarScanner</strong>.</li>
+                <li>Al terminar, usar <strong>Descargar PDF</strong> para el reporte.</li>
+                <li>Opcional: botón <strong>SonarQube</strong> abre dashboard del proyecto.</li>
+            </ol>
+        </div>
+
+        <div class="card" style="margin-top: 12px;">
+            <h3>4.2 Semgrep</h3>
+            <ol>
+                <li>Entrar a <code>/semgrep</code>.</li>
+                <li>Seleccionar proyecto.</li>
+                <li>(Opcional) usar <strong>diff</strong> para llenar <strong>SOURCES</strong> con cambios entre ramas.
+                </li>
+                <li>Configurar:
+                    <ul>
+                        <li><strong>SOURCES</strong> / <strong>EXCLUSIONS</strong>.</li>
+                        <li>Conjuntos de reglas (auto, security-audit, secrets, etc.).</li>
+                        <li>Checkbox de archivo de reglas personalizadas.</li>
+                    </ul>
+                </li>
+                <li>Ejecutar <strong>SemgrepScanner</strong>.</li>
+                <li>Al finalizar, descargar reporte con <strong>Descargar PDF</strong>.</li>
+            </ol>
+        </div>
+
+        <div class="card" style="margin-top: 12px;">
+            <h3>4.3 Gitleaks</h3>
+            <ol>
+                <li>Entrar a <code>/gitleaks</code>.</li>
+                <li>Seleccionar proyecto.</li>
+                <li>Elegir modo:
+                    <ul>
+                        <li><strong>Git</strong> (si el directorio es repo git válido).</li>
+                        <li><strong>Dir</strong> (escaneo de archivos del directorio).</li>
+                    </ul>
+                </li>
+                <li>Opcional: activar/desactivar exclusión de <code>.gitignore</code>.</li>
+                <li>Ejecutar <strong>Gitleaks</strong>.</li>
+                <li>Generar reporte con <strong>Descargar PDF</strong>.</li>
+            </ol>
+        </div>
+
+        <h2>5) Ejemplo rápido (flujo recomendado)</h2>
+        <div class="card">
+            <ol>
+                <li>Crear proyecto en <code>/app_config</code> (nombre + directorio).</li>
+                <li>Configurar token Sonar en <code>/sonar_config</code>.</li>
+                <li>(Opcional) ajustar reglas en <code>/semgrep_config</code>.</li>
+                <li>Ir a <code>/sonar</code>, seleccionar proyecto, <strong>(opcional)</strong> usar diff, correr scanner y descargar PDF.</li>
+                <li>Ir a <code>/semgrep</code>, seleccionar proyecto, <strong>(opcional)</strong> usar diff, correr scanner y descargar PDF.</li>
+                <li>Ir a <code>/gitleaks</code>, seleccionar proyecto, correr escaneo y descargar PDF.</li>
+            </ol>
+            <p class="ok">Resultado: un ciclo completo de análisis y reporte por proyecto.</p>
+        </div>
+
+        <h2>6) Problemas comunes</h2>
+        <div class="card">
+            <ul>
+                <li><strong>No aparecen proyectos:</strong> revisar que existan en <code>/app_config</code>.</li>
+                <li><strong>Error en diff:</strong> confirmar que el directorio sea repositorio Git y tenga ramas
+                    válidas.</li>
+                <li><strong>Sonar sin conexión:</strong> validar <code>sonarHostUrl</code>, token y estado de SonarQube.
+                </li>
+                <li><strong>Semgrep/Gitleaks no ejecutan:</strong> validar contenedores y acceso Docker desde la app.
+                </li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            Manual resumido generado para DevUtils. Fecha: 26-04-2026.
+        </div>
+    </main>
+</body>
+
+</html>

@@ -4,6 +4,8 @@
 name: dev_utils
 
 x-paths:
+  # Ejemplo (Windows): si "www" es la carpeta que contiene los proyectos
+  # host_root: &host_root ${HOST_ROOT:-C:/www}
   host_root: &host_root ${HOST_ROOT:-../..} # relativo al directorio del compose
 
 services:
