@@ -7,22 +7,12 @@ x-paths:
   host_root: &host_root ${HOST_ROOT:-../..} # relativo al directorio del compose
 
 services:
-  sonarqube:
-    image: sonarqube:26.3.0.120487-community
-    container_name: sonarqube
-    ports:
-      - "9000:9000"
-    volumes:
-      - sonarqube_data:/opt/sonarqube/data
-      - sonarqube_logs:/opt/sonarqube/logs
-    networks:
-      - sonar_net
 
   app:
-    # image: richardcollao/dev_utils:1.0.0
-    build:
-      context: ..                            # raíz del proyecto (dev_utils/)
-      dockerfile: docker/Dockerfile
+    image: richardcollao/dev_utils:1.0.0
+    # build:
+    #   context: ..                            # raíz del proyecto (dev_utils/)
+    #   dockerfile: docker/Dockerfile
     container_name: dev_utils
     user: root
     depends_on:
@@ -43,6 +33,17 @@ services:
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock
+    networks:
+      - sonar_net
+
+  sonarqube:
+    image: sonarqube:26.3.0.120487-community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
     networks:
       - sonar_net
 
